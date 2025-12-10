@@ -1,0 +1,466 @@
+openapi: 3.0.3
+info:
+  title: DopamineLite Notification Service API
+  version: "1.0.0"
+  description: |
+    Notification microservice for DopamineLite.
+
+    Responsibilities:
+      - Manage in-app notifications for users.
+      - Send email and WhatsApp notifications based on events.
+      - Provide a query API for BFF to show notifications in the MFEs.
+      - Consume domain events (payment status changes, issues, registration, etc.)
+        and fan them out to appropriate channels (IN_APP, EMAIL, WHATSAPP).
+
+servers:
+  - url: https://notification-service.internal/api/v1
+
+tags:
+  - name: Notifications
+    description: In-app notification CRUD/query
+  - name: Events
+    description: Domain event ingestion (payment status, issues, etc.)
+  - name: DirectSend
+    description: Direct ad-hoc sends (admin broadcast, system messages)
+
+security:
+  - serviceAuth: []
+
+components:
+  securitySchemes:
+    serviceAuth:
+      type: apiKey
+      in: header
+      name: X-Service-Token
+
+  parameters:
+    PaginationLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    PaginationOffset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+  schemas:
+    ErrorObject:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    NotificationChannel:
+      type: string
+      enum: [IN_APP, EMAIL, WHATSAPP]
+
+    DeliveryStatus:
+      type: string
+      enum: [PENDING, SENT, FAILED]
+
+    Notification:
+      type: object
+      description: |
+        Internal notification record.
+        For IN_APP notifications, this is what BFF shows in `/notifications`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        channel:
+          $ref: '#/components/schemas/NotificationChannel'
+        title:
+          type: string
+        body:
+          type: string
+        isRead:
+          type: boolean
+          description: "Meaningful mainly for IN_APP channel."
+        createdAt:
+          type: string
+          format: date-time
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+        deliveryStatus:
+          $ref: '#/components/schemas/DeliveryStatus'
+        templateKey:
+          type: string
+          nullable: true
+          description: "Optional template identifier used to generate this notification."
+        metadata:
+          type: object
+          additionalProperties: true
+          description: "Free-form metadata, e.g., {submissionId, oldStatus, newStatus}."
+      required:
+        - id
+        - userId
+        - channel
+        - title
+        - body
+        - isRead
+        - createdAt
+        - deliveryStatus
+
+    NotificationListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        total:
+          type: integer
+      required:
+        - items
+        - total
+
+    NotificationReadUpdateRequest:
+      type: object
+      properties:
+        isRead:
+          type: boolean
+          default: true
+
+    NotificationEventType:
+      type: string
+      description: "Domain-level event type. The service maps these to templates and channels."
+      enum:
+        - PAYMENT_STATUS_CHANGED
+        - ISSUE_STATUS_CHANGED
+        - ISSUE_MESSAGE_NEW
+        - STUDENT_VERIFIED
+        - STUDENT_REGISTERED
+        - ADMIN_BROADCAST
+
+    NotificationEventRequest:
+      type: object
+      description: |
+        Generic domain event that triggers notifications.
+        Typically called by BFF after key actions.
+      properties:
+        eventType:
+          $ref: '#/components/schemas/NotificationEventType'
+        primaryUserId:
+          type: string
+          format: uuid
+          description: |
+            The main user affected (e.g., student whose payment status changed,
+            student who reported the issue, etc.).
+        actorUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "User who performed the action (e.g., admin who approved)."
+        channels:
+          type: array
+          description: |
+            Preferred channels for this event (defaults handled server-side).
+            For example, PAYMENT_STATUS_CHANGED will always send at least EMAIL
+            to satisfy BRD; IN_APP can be added here as well. :contentReference[oaicite:2]{index=2}
+          items:
+            $ref: '#/components/schemas/NotificationChannel'
+        payload:
+          type: object
+          additionalProperties: true
+          description: |
+            Event-specific payload; used by templates.
+            Examples:
+              - for PAYMENT_STATUS_CHANGED:
+                  { "submissionId": "...", "oldStatus": "PENDING",
+                    "newStatus": "APPROVED", "rejectionReason": null }
+              - for ISSUE_STATUS_CHANGED:
+                  { "issueId": "...", "oldStatus": "OPEN", "newStatus": "SOLVED" }
+              - for ISSUE_MESSAGE_NEW:
+                  { "issueId": "...", "messagePreview": "..." }
+      required:
+        - eventType
+        - primaryUserId
+
+    DirectNotificationSendRequest:
+      type: object
+      description: |
+        For ad-hoc notifications, typically initiated by admins via BFF
+        (e.g., broadcast messages, important announcements).
+      properties:
+        targetUserIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        channel:
+          $ref: '#/components/schemas/NotificationChannel'
+        title:
+          type: string
+        body:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+      required:
+        - targetUserIds
+        - channel
+        - title
+        - body
+
+paths:
+  #################################
+  # NOTIFICATIONS (QUERY FOR BFF)
+  #################################
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: List notifications for a user
+      description: |
+        Used by BFF `/notifications` to show in-app notifications in MFEs.
+
+        BFF:
+          - Passes current userId in query.
+          - Typically filters on IN_APP channel, but this endpoint can return all.
+      security:
+        - serviceAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: unreadOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: channel
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/NotificationChannel'
+          description: "Optional filter (e.g., IN_APP only)."
+        - $ref: '#/components/parameters/PaginationLimit'
+        - $ref: '#/components/parameters/PaginationOffset'
+      responses:
+        '200':
+          description: Notifications for user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationListResponse'
+        '400':
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+
+  /notifications/{notificationId}:
+    get:
+      tags: [Notifications]
+      summary: Get a single notification
+      description: |
+        Optional detail view. BFF usually only needs list + mark-read,
+        but this is useful for debugging or deep linking.
+      security:
+        - serviceAuth: []
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Notification found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '404':
+          description: Notification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+
+  /notifications/{notificationId}/read:
+    patch:
+      tags: [Notifications]
+      summary: Mark a notification as read
+      description: |
+        Used by BFF `/notifications/{notificationId}/read`.
+
+        - Sets `isRead=true` and `readAt=now` for IN_APP notifications.
+      security:
+        - serviceAuth: []
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationReadUpdateRequest'
+      responses:
+        '200':
+          description: Notification updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '404':
+          description: Notification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+
+  #################################
+  # DOMAIN EVENTS (BFF / OTHER SERVICES)
+  #################################
+  /notification-events:
+    post:
+      tags: [Events]
+      summary: Ingest a domain event to trigger notifications
+      description: |
+        Generic event endpoint used by BFF (or other backend services).
+
+        Examples:
+
+          1) Payment status change
+             - Triggered after Payment Service updates status.
+             - Satisfies BRD: "All status changes trigger an email to the student's email." :contentReference[oaicite:3]{index=3}
+             - BFF calls:
+               eventType: PAYMENT_STATUS_CHANGED
+               primaryUserId: <studentId>
+               channels: [EMAIL, IN_APP]
+               payload:
+                 { "submissionId": "...",
+                   "oldStatus": "PENDING",
+                   "newStatus": "APPROVED",
+                   "rejectionReason": null }
+
+          2) Issue status change
+             - eventType: ISSUE_STATUS_CHANGED
+             - primaryUserId: <studentId>
+             - channels: [IN_APP, EMAIL]
+             - payload: { "issueId": "...", "oldStatus": "...", "newStatus": "SOLVED" }
+
+          3) New issue message (chat)
+             - eventType: ISSUE_MESSAGE_NEW
+             - primaryUserId: <otherPartyId> (student or admin)
+             - channels: [IN_APP]
+             - payload: { "issueId": "...", "messagePreview": "..." }
+
+          4) Student verified
+             - eventType: STUDENT_VERIFIED
+             - primaryUserId: <studentId>
+             - channels: [EMAIL]
+             - payload: { "message": "Welcome to DopamineLite" }
+
+        The Notification Service:
+          - Resolves email/WhatsApp details from User Service (by userId).
+          - Applies templates per eventType.
+          - Creates IN_APP records where relevant.
+          - Sends EMAIL / WHATSAPP via configured providers.
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationEventRequest'
+      responses:
+        '202':
+          description: Event accepted for processing
+        '400':
+          description: Invalid event payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+
+  #################################
+  # DIRECT SEND (ADMIN-INITIATED / SYSTEM MESSAGES)
+  #################################
+  /notifications/send:
+    post:
+      tags: [DirectSend]
+      summary: Directly send ad-hoc notifications
+      description: |
+        Used by BFF when admins explicitly "send notifications" to students
+        (e.g., announcements, reminders).
+
+        Now supports MULTIPLE channels per request, similar to notification events.
+
+        Example:
+          channels: [IN_APP, EMAIL]
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                targetUserIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                channels:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/NotificationChannel'
+                  description: |
+                    One or more delivery channels:
+                      - IN_APP
+                      - EMAIL
+                      - WHATSAPP
+                title:
+                  type: string
+                body:
+                  type: string
+                metadata:
+                  type: object
+                  additionalProperties: true
+              required:
+                - targetUserIds
+                - channels
+                - title
+                - body
+      responses:
+        '202':
+          description: Send request accepted
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'

@@ -1,0 +1,86 @@
+databaseChangeLog:
+  - changeSet:
+      id: create-delivery-outbox
+      author: system
+      changes:
+        - createTable:
+            tableName: delivery_outbox
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: notification_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: channel
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: retry_count
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: max_retries
+                  type: int
+                  defaultValueNumeric: 3
+                  constraints:
+                    nullable: false
+              - column:
+                  name: next_retry_at
+                  type: timestamp
+              - column:
+                  name: last_error
+                  type: varchar(1000)
+              - column:
+                  name: delivered_at
+                  type: timestamp
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: delivery_outbox
+            baseColumnNames: notification_id
+            constraintName: fk_outbox_notification
+            referencedTableName: notifications
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+        - createIndex:
+            tableName: delivery_outbox
+            indexName: idx_outbox_status_retry
+            columns:
+              - column:
+                  name: status
+              - column:
+                  name: next_retry_at
+
+        - createIndex:
+            tableName: delivery_outbox
+            indexName: idx_outbox_notification_id
+            columns:
+              - column:
+                  name: notification_id

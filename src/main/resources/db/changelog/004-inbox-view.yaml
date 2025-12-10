@@ -1,0 +1,37 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-01-inbox-view
+      author: copilot
+      changes:
+        - sql:
+            sql: |
+              -- Simple view for IN_APP inbox (fast read + mark-read)
+              CREATE OR REPLACE VIEW notifications_inbox AS
+              SELECT
+                id,
+                user_id,
+                title,
+                body,
+                is_read,
+                read_at,
+                created_at,
+                updated_at,
+                template_key,
+                metadata
+              FROM notifications
+              WHERE channel = 'IN_APP';
+  - changeSet:
+      id: 004-02-inbox-indexes
+      author: copilot
+      changes:
+        - sql:
+            sql: |
+              -- Indexes on underlying partitions already exist.
+              -- Optionally create a materialized view per need.
+              -- Uncomment below to switch to materialized view:
+              -- DROP VIEW IF EXISTS notifications_inbox;
+              -- CREATE MATERIALIZED VIEW notifications_inbox AS
+              -- SELECT id, user_id, title, body, is_read, read_at, created_at, updated_at, template_key, metadata
+              -- FROM notifications WHERE channel = 'IN_APP';
+              -- CREATE INDEX IF NOT EXISTS idx_inbox_user_isread ON notifications_inbox (user_id, is_read, created_at DESC);
+              -- CREATE INDEX IF NOT EXISTS idx_inbox_created_at ON notifications_inbox (created_at);

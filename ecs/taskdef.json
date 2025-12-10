@@ -1,0 +1,42 @@
+{
+  "family": "notifications-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/notificationsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "notifications",
+      "image": "<IMAGE_URI>",
+      "essential": true,
+      "portMappings": [
+        { "containerPort": 8080, "hostPort": 8080, "protocol": "tcp" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/notifications",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "environment": [
+        { "name": "SPRING_PROFILES_ACTIVE", "value": "prod" },
+        { "name": "SPRING_DATASOURCE_URL", "value": "${DB_URL}" },
+        { "name": "SPRING_DATASOURCE_USERNAME", "value": "${DB_USERNAME}" },
+        { "name": "SPRING_DATASOURCE_PASSWORD", "value": "${DB_PASSWORD}" },
+        { "name": "NOTIFICATIONS_EMAIL_SENDER", "value": "${NOTIFICATIONS_EMAIL_SENDER}" },
+        { "name": "NOTIFICATIONS_EMAIL_REGION", "value": "${NOTIFICATIONS_EMAIL_REGION}" }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

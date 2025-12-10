@@ -1,0 +1,120 @@
+name: Deploy to AWS ECS
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+  ECS_CLUSTER: notifications-cluster
+  ECS_SERVICE: notifications-service
+  ECS_TASK_FAMILY: notifications-task
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Build and test
+        run: |
+          mvn -q -DskipITs=true clean test
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+        if: ${{ secrets.AWS_ROLE_TO_ASSUME != '' }}
+
+      - name: Configure AWS credentials (keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+        if: ${{ secrets.AWS_ROLE_TO_ASSUME == '' }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to ECR
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${IMAGE_TAG}
+          docker build -t ${IMAGE_URI} .
+          docker push ${IMAGE_URI}
+          echo "image=${IMAGE_URI}" >> $GITHUB_OUTPUT
+
+      - name: Render task definition
+        id: taskdef
+        env:
+          IMAGE_URI: ${{ steps.ecr.outputs.image }}
+        run: |
+          sed "s|<IMAGE_URI>|${IMAGE_URI}|g" ecs/taskdef.json > ecs/taskdef.rendered.json
+          echo "taskdef=ecs/taskdef.rendered.json" >> $GITHUB_OUTPUT
+
+      - name: Fetch runtime secrets from SSM
+        run: |
+          DB_URL=$(aws ssm get-parameter --name /notifications/DB_URL --with-decryption --query Parameter.Value --output text)
+          DB_USERNAME=$(aws ssm get-parameter --name /notifications/DB_USERNAME --with-decryption --query Parameter.Value --output text)
+          DB_PASSWORD=$(aws ssm get-parameter --name /notifications/DB_PASSWORD --with-decryption --query Parameter.Value --output text)
+          NOTIFICATIONS_EMAIL_SENDER=$(aws ssm get-parameter --name /notifications/EMAIL_SENDER --with-decryption --query Parameter.Value --output text)
+          NOTIFICATIONS_EMAIL_REGION=$(aws ssm get-parameter --name /notifications/EMAIL_REGION --with-decryption --query Parameter.Value --output text)
+          jq \
+            --arg DB_URL "$DB_URL" \
+            --arg DB_USERNAME "$DB_USERNAME" \
+            --arg DB_PASSWORD "$DB_PASSWORD" \
+            --arg SENDER "$NOTIFICATIONS_EMAIL_SENDER" \
+            --arg REGION "$NOTIFICATIONS_EMAIL_REGION" \
+            '.containerDefinitions[0].environment |= map(
+              if .name == "SPRING_DATASOURCE_URL" then .value = $DB_URL
+              elif .name == "SPRING_DATASOURCE_USERNAME" then .value = $DB_USERNAME
+              elif .name == "SPRING_DATASOURCE_PASSWORD" then .value = $DB_PASSWORD
+              elif .name == "NOTIFICATIONS_EMAIL_SENDER" then .value = $SENDER
+              elif .name == "NOTIFICATIONS_EMAIL_REGION" then .value = $REGION
+              else . end
+            )' ecs/taskdef.rendered.json > ecs/taskdef.env.json
+          mv ecs/taskdef.env.json ecs/taskdef.rendered.json
+
+      - name: Run Liquibase migration (pre-deploy)
+        env:
+          DB_URL: ${{ steps.taskdef.outputs.DB_URL }}
+          DB_USERNAME: ${{ steps.taskdef.outputs.DB_USERNAME }}
+          DB_PASSWORD: ${{ steps.taskdef.outputs.DB_PASSWORD }}
+        run: |
+          ./mvnw -q -DskipTests=true liquibase:update \
+            -Dspring.datasource.url="$DB_URL" \
+            -Dspring.datasource.username="$DB_USERNAME" \
+            -Dspring.datasource.password="$DB_PASSWORD"
+
+      - name: Register task definition
+        id: register
+        run: |
+          aws ecs register-task-definition --cli-input-json file://ecs/taskdef.rendered.json > ecs/taskdef.out.json
+          REVISION=$(jq -r '.taskDefinition.revision' ecs/taskdef.out.json)
+          echo "revision=${REVISION}" >> $GITHUB_OUTPUT
+
+      - name: Deploy ECS service
+        run: |
+          aws ecs update-service \
+            --cluster ${ECS_CLUSTER} \
+            --service ${ECS_SERVICE} \
+            --task-definition ${ECS_TASK_FAMILY}:${{ steps.register.outputs.revision }} \
+            --force-new-deployment

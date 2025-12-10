@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - include:
+      file: classpath:db/changelog/001-notifications-core.yaml
+  - include:
+      file: classpath:db/changelog/002-notifications-partitions.sql
+  - include:
+      file: classpath:db/changelog/003-delivery-outbox.yaml
+  - include:
+      file: classpath:db/changelog/004-inbox-view.yaml
+  - include:
+      file: classpath:db/changelog/005-delivery-outbox-table.yaml

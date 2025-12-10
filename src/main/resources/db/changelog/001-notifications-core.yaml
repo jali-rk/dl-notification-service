@@ -1,0 +1,45 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-01-create-enums
+      author: copilot
+      changes:
+        - sql:
+            sql: |
+              DO $$ BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notification_channel') THEN
+                  CREATE TYPE notification_channel AS ENUM ('IN_APP','EMAIL','WHATSAPP');
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'delivery_status') THEN
+                  CREATE TYPE delivery_status AS ENUM ('PENDING','SENT','FAILED');
+                END IF;
+              END $$;
+  - changeSet:
+      id: 001-02-create-notifications-parent
+      author: copilot
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE IF NOT EXISTS notifications (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL,
+                channel notification_channel NOT NULL,
+                title VARCHAR(500) NOT NULL,
+                body TEXT NOT NULL,
+                is_read BOOLEAN NOT NULL DEFAULT FALSE,
+                read_at TIMESTAMP NULL,
+                delivery_status delivery_status NOT NULL DEFAULT 'PENDING',
+                template_key VARCHAR(100) NULL,
+                metadata JSONB NULL,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL
+              ) PARTITION BY RANGE (created_at);
+  - changeSet:
+      id: 001-03-indexes-parent
+      author: copilot
+      changes:
+        - sql:
+            sql: |
+              -- Parent indexes created as templates; partitions will have their own
+              CREATE INDEX IF NOT EXISTS idx_notifications_user_channel ON notifications (user_id, channel, created_at);
+              CREATE INDEX IF NOT EXISTS idx_notifications_user_is_read ON notifications (user_id, is_read, created_at);
+              CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (created_at);
