@@ -15,11 +15,11 @@ Requires Docker. Run repository/migration tests:
 mvn test -Dtest=NotificationRepositoryIT
 ```
 
-### SES Integration Tests (LocalStack)
-Requires Docker. Test AWS SES email delivery:
+### Email Integration Tests (LocalStack)
+Requires Docker. Test email delivery via SMTP:
 ```bash
 # With Docker running
-mvn test -Dtest=SesEmailServiceIT
+mvn test -Dtest=EmailServiceIT
 ```
 
 ### Full Build

@@ -1,7 +1,7 @@
 databaseChangeLog:
   - changeSet:
       id: 003-01-delivery-outbox
-      author: copilot
+      author: system
       changes:
         - createTable:
             tableName: delivery_outbox

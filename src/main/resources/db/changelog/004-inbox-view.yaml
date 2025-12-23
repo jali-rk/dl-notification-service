@@ -1,7 +1,7 @@
 databaseChangeLog:
   - changeSet:
       id: 004-01-inbox-view
-      author: copilot
+      author: system
       changes:
         - sql:
             sql: |
@@ -22,7 +22,7 @@ databaseChangeLog:
               WHERE channel = 'IN_APP';
   - changeSet:
       id: 004-02-inbox-indexes
-      author: copilot
+      author: system
       changes:
         - sql:
             sql: |

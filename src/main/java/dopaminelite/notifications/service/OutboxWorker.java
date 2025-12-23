@@ -28,7 +28,7 @@ public class OutboxWorker {
 
     private final DeliveryOutboxRepository outboxRepository;
     private final NotificationRepository notificationRepository;
-    private final SesEmailService sesEmailService;
+    private final EmailService emailService;
     private final UserServiceClient userServiceClient;
 
     /**
@@ -100,7 +100,7 @@ public class OutboxWorker {
         switch (channel) {
             case EMAIL:
                 String recipientEmail = userServiceClient.getUserEmail(notification.getUserId());
-                sesEmailService.sendEmail(recipientEmail, notification.getTitle(), notification.getBody());
+                emailService.sendEmail(recipientEmail, notification.getTitle(), notification.getBody());
                 break;
             case WHATSAPP:
                 // TODO: Integrate WhatsApp provider

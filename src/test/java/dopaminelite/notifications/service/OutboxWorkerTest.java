@@ -15,7 +15,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import software.amazon.awssdk.services.ses.model.SesException;
+import org.springframework.mail.MailSendException;
 
 import java.time.Instant;
 import java.time.Duration;
@@ -39,7 +39,7 @@ class OutboxWorkerTest {
     private NotificationRepository notificationRepository;
 
     @Mock
-    private SesEmailService sesEmailService;
+    private EmailService sesEmailService;
 
     @Mock
     private UserServiceClient userServiceClient;
@@ -118,7 +118,7 @@ class OutboxWorkerTest {
                 .thenReturn(Optional.of(testNotification));
         when(userServiceClient.getUserEmail(userId))
                 .thenReturn("user@example.com");
-        doThrow(SesException.builder().message("Rate limit exceeded").build())
+        doThrow(new MailSendException("Rate limit exceeded"))
                 .when(sesEmailService).sendEmail(anyString(), anyString(), anyString());
 
         // Act
@@ -150,7 +150,7 @@ class OutboxWorkerTest {
                 .thenReturn(Optional.of(testNotification));
         when(userServiceClient.getUserEmail(userId))
                 .thenReturn("user@example.com");
-        doThrow(SesException.builder().message("Permanent failure").build())
+        doThrow(new MailSendException("Permanent failure"))
                 .when(sesEmailService).sendEmail(anyString(), anyString(), anyString());
 
         // Act
@@ -184,7 +184,7 @@ class OutboxWorkerTest {
                 .thenReturn(Optional.of(testNotification));
         when(userServiceClient.getUserEmail(userId))
                 .thenReturn("user@example.com");
-        doThrow(SesException.builder().message("Temporary failure").build())
+        doThrow(new MailSendException("Temporary failure"))
                 .when(sesEmailService).sendEmail(anyString(), anyString(), anyString());
 
         // Act

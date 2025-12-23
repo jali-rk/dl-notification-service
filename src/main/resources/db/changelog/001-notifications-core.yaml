@@ -1,41 +1,50 @@
 databaseChangeLog:
   - changeSet:
-      id: 001-01-create-enums
-      author: copilot
+      id: 001-01-create-notification-channel-enum
+      author: system
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM pg_type WHERE typname = 'notification_channel'
       changes:
         - sql:
-            sql: |
-              DO $$ BEGIN
-                IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notification_channel') THEN
-                  CREATE TYPE notification_channel AS ENUM ('IN_APP','EMAIL','WHATSAPP');
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'delivery_status') THEN
-                  CREATE TYPE delivery_status AS ENUM ('PENDING','SENT','FAILED');
-                END IF;
-              END $$;
+            sql: CREATE TYPE notification_channel AS ENUM ('IN_APP','EMAIL','WHATSAPP')
+  - changeSet:
+      id: 001-01-create-delivery-status-enum
+      author: system
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM pg_type WHERE typname = 'delivery_status'
+      changes:
+        - sql:
+            sql: CREATE TYPE delivery_status AS ENUM ('PENDING','SENT','FAILED')
   - changeSet:
       id: 001-02-create-notifications-parent
-      author: copilot
+      author: system
       changes:
         - sql:
             sql: |
               CREATE TABLE IF NOT EXISTS notifications (
-                id UUID PRIMARY KEY,
+                id UUID NOT NULL,
                 user_id UUID NOT NULL,
-                channel notification_channel NOT NULL,
+                channel VARCHAR(20) NOT NULL,
                 title VARCHAR(500) NOT NULL,
                 body TEXT NOT NULL,
                 is_read BOOLEAN NOT NULL DEFAULT FALSE,
                 read_at TIMESTAMP NULL,
-                delivery_status delivery_status NOT NULL DEFAULT 'PENDING',
+                delivery_status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
                 template_key VARCHAR(100) NULL,
                 metadata JSONB NULL,
                 created_at TIMESTAMP NOT NULL,
-                updated_at TIMESTAMP NOT NULL
+                updated_at TIMESTAMP NOT NULL,
+                PRIMARY KEY (user_id, id, created_at)
               ) PARTITION BY RANGE (created_at);
   - changeSet:
       id: 001-03-indexes-parent
-      author: copilot
+      author: system
       changes:
         - sql:
             sql: |

@@ -40,7 +40,7 @@ class NotificationServiceTest {
     private DeliveryOutboxRepository deliveryOutboxRepository;
 
     @Mock
-    private SesEmailService sesEmailService;
+    private EmailService sesEmailService;
 
     @Mock
     private UserServiceClient userServiceClient;

@@ -2,6 +2,11 @@ databaseChangeLog:
   - changeSet:
       id: create-delivery-outbox
       author: system
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+          - tableExists:
+              tableName: delivery_outbox
       changes:
         - createTable:
             tableName: delivery_outbox
@@ -60,14 +65,6 @@ databaseChangeLog:
                   defaultValueComputed: CURRENT_TIMESTAMP
                   constraints:
                     nullable: false
-
-        - addForeignKeyConstraint:
-            baseTableName: delivery_outbox
-            baseColumnNames: notification_id
-            constraintName: fk_outbox_notification
-            referencedTableName: notifications
-            referencedColumnNames: id
-            onDelete: CASCADE
 
         - createIndex:
             tableName: delivery_outbox

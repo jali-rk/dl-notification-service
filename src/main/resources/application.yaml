@@ -22,6 +22,23 @@ spring:
           lob:
             non_contextual_creation: true
 
+  # Mail Configuration for AWS SES SMTP
+  mail:
+    host: ${SMTP_HOST:email-smtp.ap-south-1.amazonaws.com}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME}
+    password: ${SMTP_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
 # Actuator Configuration
 management:
   endpoints:
@@ -44,10 +61,9 @@ management:
 server:
   port: 8080
 
-# Email (SES) Configuration
+# Email (SES SMTP) Configuration
 notifications:
   email:
-    sender: no-reply@example.com
-    region: us-east-1
+    sender: ${SMTP_SENDER_EMAIL:sankapeeris360@gmail.com}
 
 # Liquibase uses default changelog path classpath:/db/changelog/db.changelog-master.yaml

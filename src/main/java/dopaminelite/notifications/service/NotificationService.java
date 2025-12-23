@@ -37,7 +37,7 @@ public class NotificationService {
     
     private final NotificationRepository notificationRepository;
     private final DeliveryOutboxRepository deliveryOutboxRepository;
-    private final SesEmailService sesEmailService;
+    private final EmailService emailService;
     private final UserServiceClient userServiceClient;
     
     /**
@@ -305,7 +305,7 @@ public class NotificationService {
             switch (notification.getChannel()) {
                 case EMAIL:
                     String recipientEmail = userServiceClient.getUserEmail(notification.getUserId());
-                    sesEmailService.sendEmail(recipientEmail, notification.getTitle(), notification.getBody());
+                    emailService.sendEmail(recipientEmail, notification.getTitle(), notification.getBody());
                     break;
                 case WHATSAPP:
                     // TODO: Integrate WhatsApp provider

@@ -1,8 +1,8 @@
 -- liquibase formatted sql
--- changeset copilot:002-01-create-monthly-partitions
+-- changeset copilot:002-01-create-monthly-partitions splitStatements:false endDelimiter:END_PARTITIONS
 
 -- Helper function to create monthly partitions with 8 hash subpartitions by user_id
-DO $$
+DO $BODY$
 DECLARE
   start_date DATE := DATE '2025-01-01';
   end_date   DATE := DATE '2026-12-01';
@@ -44,23 +44,25 @@ BEGIN
 
     part_start := (part_start + INTERVAL '1 month')::DATE;
   END LOOP;
-END $$;
+END $BODY$;
+END_PARTITIONS
 
--- changeset copilot:002-02-triggers-updated-at
+-- changeset copilot:002-02-triggers-updated-at splitStatements:false endDelimiter:END_TRIGGERS
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $BODY$
 BEGIN
   NEW.updated_at := CURRENT_TIMESTAMP;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$BODY$ LANGUAGE plpgsql;
 
-DO $$
+DO $BODY$
 DECLARE
   r RECORD;
 BEGIN
-  FOR r IN SELECT relname FROM pg_class WHERE relname LIKE 'notifications_%_h%'
+  FOR r IN SELECT relname FROM pg_class WHERE relname LIKE 'notifications_%_h%' AND relkind = 'r'
   LOOP
     EXECUTE format('CREATE TRIGGER trg_%s_updated_at BEFORE UPDATE ON %s FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()', r.relname, r.relname);
   END LOOP;
-END $$;
+END $BODY$;
+END_TRIGGERS
