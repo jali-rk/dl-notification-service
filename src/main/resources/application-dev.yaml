@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: notifications
+
+  # Database Configuration
+  datasource:
+    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:dopaminelite_notifications}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          lob:
+            non_contextual_creation: true
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+      base-path: /
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    db:
+      enabled: true
+    defaults:
+      enabled: true
+
+# Server Configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /notifications
+
+# Email (SES) Configuration
+notifications:
+  email:
+    sender: no-reply@example.com
+    region: us-east-1
+
+# Liquibase uses default changelog path classpath:/db/changelog/db.changelog-master.yaml
