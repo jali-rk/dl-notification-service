@@ -3,7 +3,8 @@ package dopaminelite.notifications.controller;
 import dopaminelite.notifications.dto.NotificationDto;
 import dopaminelite.notifications.dto.NotificationListResponse;
 import dopaminelite.notifications.dto.NotificationReadUpdateRequest;
-import dopaminelite.notifications.entity.NotificationChannel;
+import dopaminelite.notifications.entity.enums.NotificationChannel;
+import dopaminelite.notifications.exception.ValidationException;
 import dopaminelite.notifications.service.NotificationService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -57,6 +58,10 @@ public class NotificationController {
     public ResponseEntity<NotificationDto> getNotification(
         @PathVariable UUID notificationId
     ) {
+        if (notificationId == null) {
+            throw new ValidationException("Notification ID cannot be empty");
+        }
+        
         NotificationDto notification = notificationService.getNotification(notificationId);
         return ResponseEntity.ok(notification);
     }

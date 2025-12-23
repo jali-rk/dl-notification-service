@@ -3,9 +3,10 @@ package dopaminelite.notifications.service;
 import dopaminelite.notifications.client.UserServiceClient;
 import dopaminelite.notifications.dto.*;
 import dopaminelite.notifications.entity.DeliveryOutbox;
-import dopaminelite.notifications.entity.DeliveryStatus;
 import dopaminelite.notifications.entity.Notification;
-import dopaminelite.notifications.entity.NotificationChannel;
+import dopaminelite.notifications.entity.enums.DeliveryStatus;
+import dopaminelite.notifications.entity.enums.NotificationChannel;
+import dopaminelite.notifications.exception.ResourceNotFoundException;
 import dopaminelite.notifications.repository.DeliveryOutboxRepository;
 import dopaminelite.notifications.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
@@ -93,7 +94,7 @@ public class NotificationService {
     @Transactional(readOnly = true)
     public NotificationDto getNotification(UUID notificationId) {
         Notification notification = notificationRepository.findById(notificationId)
-            .orElseThrow(() -> new RuntimeException("Notification not found: " + notificationId));
+            .orElseThrow(() -> new ResourceNotFoundException("Notification not found: " + notificationId));
         return toDto(notification);
     }
     
@@ -104,7 +105,7 @@ public class NotificationService {
     @Transactional
     public NotificationDto markAsRead(UUID notificationId, NotificationReadUpdateRequest request) {
         Notification notification = notificationRepository.findById(notificationId)
-            .orElseThrow(() -> new RuntimeException("Notification not found: " + notificationId));
+            .orElseThrow(() -> new ResourceNotFoundException("Notification not found: " + notificationId));
         
         notification.setRead(request.isRead());
         if (request.isRead() && notification.getReadAt() == null) {
@@ -275,7 +276,7 @@ public class NotificationService {
      * Default channels per event type.
      */
     private List<NotificationChannel> getDefaultChannelsForEventType(
-        dopaminelite.notifications.entity.NotificationEventType eventType
+        dopaminelite.notifications.entity.enums.NotificationEventType eventType
     ) {
         // Default channel configuration per event type
         return switch (eventType) {

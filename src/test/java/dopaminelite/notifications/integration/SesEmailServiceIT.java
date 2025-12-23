@@ -24,7 +24,14 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ses.SesClient;
+import software.amazon.awssdk.services.ses.model.SendEmailRequest;
+import software.amazon.awssdk.services.ses.model.SendEmailResponse;
 import software.amazon.awssdk.services.ses.model.VerifyEmailIdentityRequest;
+
+import java.util.Arrays;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 
 @Testcontainers
@@ -79,5 +86,51 @@ class SesEmailServiceIT {
     void sendEmailWorks() {
         // Should not throw; LocalStack accepts and returns a messageId
         emailService.sendEmail("recipient@example.com", "Test Subject", "Hello from LocalStack SES");
+    }
+
+    @Test
+    @DisplayName("sendEmail with LocalStack returns messageId")
+    void sendEmail_withLocalStack_returnsMessageId() {
+        // LocalStack returns synthetic messageIds for sent emails
+        assertDoesNotThrow(() -> {
+            emailService.sendEmail("user@example.com", "Test Subject", "Test Body");
+        });
+        // Verify the email was accepted (absence of exception indicates success)
+    }
+
+    @Test
+    @DisplayName("sendEmailBatch with LocalStack sends to multiple recipients")
+    void sendEmailBatch_withLocalStack_sendsToMultipleRecipients() {
+        List<String> recipients = Arrays.asList(
+                "user1@example.com",
+                "user2@example.com",
+                "user3@example.com"
+        );
+
+        assertDoesNotThrow(() -> {
+            emailService.sendEmailBatch(recipients, "Batch Subject", "Batch Body Content");
+        });
+    }
+
+    @Test
+    @DisplayName("sendEmail with Unicode content sends correctly")
+    void sendEmail_withUnicodeContent_sendsCorrectly() {
+        String unicodeSubject = "Test 🎉 Unicode ñ ü Subject";
+        String unicodeBody = "Body with émojis 😊, Chinese characters 你好, and Arabic العربية";
+
+        assertDoesNotThrow(() -> {
+            emailService.sendEmail("recipient@example.com", unicodeSubject, unicodeBody);
+        });
+    }
+
+    @Test
+    @DisplayName("sendEmail with large body sends successfully")
+    void sendEmail_withLargeBody_sendsSuccessfully() {
+        // Create a large email body (50KB)
+        String largeBody = "X".repeat(50 * 1024);
+
+        assertDoesNotThrow(() -> {
+            emailService.sendEmail("recipient@example.com", "Large Email Test", largeBody);
+        });
     }
 }

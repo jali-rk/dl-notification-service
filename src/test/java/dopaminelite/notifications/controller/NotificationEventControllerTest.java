@@ -1,8 +1,9 @@
 package dopaminelite.notifications.controller;
 
 import dopaminelite.notifications.dto.NotificationEventRequest;
-import dopaminelite.notifications.entity.NotificationChannel;
-import dopaminelite.notifications.entity.NotificationEventType;
+import dopaminelite.notifications.entity.enums.NotificationChannel;
+import dopaminelite.notifications.entity.enums.NotificationEventType;
+import dopaminelite.notifications.exception.GlobalExceptionHandler;
 import dopaminelite.notifications.service.NotificationService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

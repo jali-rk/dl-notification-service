@@ -30,7 +30,7 @@ public class SesEmailService {
     @Value("${notifications.email.region}")
     private String region;
 
-    private SesClient sesClientOverride;
+    private final SesClient sesClient;
 
     /**
      * Primary constructor for Spring where client is built from environment.
@@ -40,7 +40,7 @@ public class SesEmailService {
                            @Value("${notifications.email.region}") String region) {
         this.senderEmail = senderEmail;
         this.region = region;
-        this.sesClientOverride = null;
+        this.sesClient = buildClient();
     }
 
     /**
@@ -49,13 +49,10 @@ public class SesEmailService {
     public SesEmailService(String senderEmail, String region, SesClient sesClient) {
         this.senderEmail = senderEmail;
         this.region = region;
-        this.sesClientOverride = sesClient;
+        this.sesClient = sesClient;
     }
 
     private SesClient buildClient() {
-        if (sesClientOverride != null) {
-            return sesClientOverride;
-        }
         return SesClient.builder()
                 .region(Region.of(region))
                 .credentialsProvider(DefaultCredentialsProvider.create())
@@ -63,10 +60,19 @@ public class SesEmailService {
     }
 
     /**
+     * Cleanup SES client when Spring context shuts down.
+     */
+    @jakarta.annotation.PreDestroy
+    public void cleanup() {
+        if (sesClient != null) {
+            sesClient.close();
+        }
+    }
+
+    /**
      * Send a simple text email to a single recipient.
      */
     public void sendEmail(String recipientEmail, String subject, String bodyText) {
-        SesClient client = buildClient();
         try {
             Destination destination = Destination.builder()
                     .toAddresses(recipientEmail)
@@ -75,24 +81,22 @@ public class SesEmailService {
             Content subjectContent = Content.builder().data(subject).build();
             Content bodyContent = Content.builder().data(bodyText).build();
 
-                Message message = Message.builder()
+            Message message = Message.builder()
                     .subject(subjectContent)
                     .body(b -> b.text(bodyContent))
                     .build();
 
-                SendEmailRequest request = SendEmailRequest.builder()
+            SendEmailRequest request = SendEmailRequest.builder()
                     .destination(destination)
                     .message(message)
                     .source(senderEmail)
                     .build();
 
-            SendEmailResponse response = client.sendEmail(request);
+            SendEmailResponse response = sesClient.sendEmail(request);
             log.info("SES send success: messageId={}", response.messageId());
         } catch (Exception e) {
             log.error("SES send failed", e);
             throw e;
-        } finally {
-            client.close();
         }
     }
 
@@ -100,7 +104,6 @@ public class SesEmailService {
      * Send a simple text email to multiple recipients.
      */
     public void sendEmailBatch(List<String> recipientEmails, String subject, String bodyText) {
-        SesClient client = buildClient();
         try {
             Destination destination = Destination.builder()
                     .toAddresses(recipientEmails)
@@ -109,24 +112,22 @@ public class SesEmailService {
             Content subjectContent = Content.builder().data(subject).build();
             Content bodyContent = Content.builder().data(bodyText).build();
 
-                Message message = Message.builder()
+            Message message = Message.builder()
                     .subject(subjectContent)
                     .body(b -> b.text(bodyContent))
                     .build();
 
-                SendEmailRequest request = SendEmailRequest.builder()
+            SendEmailRequest request = SendEmailRequest.builder()
                     .destination(destination)
                     .message(message)
                     .source(senderEmail)
                     .build();
 
-            SendEmailResponse response = client.sendEmail(request);
+            SendEmailResponse response = sesClient.sendEmail(request);
             log.info("SES batch send success: messageId={}", response.messageId());
         } catch (Exception e) {
             log.error("SES batch send failed", e);
             throw e;
-        } finally {
-            client.close();
         }
     }
 }

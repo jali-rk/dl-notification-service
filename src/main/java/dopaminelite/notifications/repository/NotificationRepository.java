@@ -1,7 +1,7 @@
 package dopaminelite.notifications.repository;
 
 import dopaminelite.notifications.entity.Notification;
-import dopaminelite.notifications.entity.NotificationChannel;
+import dopaminelite.notifications.entity.enums.NotificationChannel;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

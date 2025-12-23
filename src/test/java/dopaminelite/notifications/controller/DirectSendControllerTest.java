@@ -1,5 +1,6 @@
 package dopaminelite.notifications.controller;
 
+import dopaminelite.notifications.exception.GlobalExceptionHandler;
 import dopaminelite.notifications.service.NotificationService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

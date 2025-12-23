@@ -1,75 +1,63 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:18-alpine
     container_name: dopaminelite-notifications-db
     environment:
-      POSTGRES_DB: dopaminelite_notifications
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      PGDATA: /var/lib/postgresql/data_notifications/pgdata
+      POSTGRES_DB: ${POSTGRES_DB:-notifications}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data_notifications
-      - ./docs/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-notifications}"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - notifications-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: dopaminelite-notifications-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   notifications-service:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: dopaminelite-notifications-service
+    ports:
+      - "8080:8080"
+      - "35729:35729"  # LiveReload port for Spring DevTools
+    volumes:
+      - ./src:/app/src
+      - ./pom.xml:/app/pom.xml
+      - maven_cache:/root/.m2  # Cache Maven dependencies
+    environment:
+      - SPRING_DEVTOOLS_RESTART_ENABLED=true
+      - SPRING_DEVTOOLS_LIVERELOAD_ENABLED=true
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-dopaminelite_notifications}
+      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER}
+      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_JPA_SHOW_SQL=true
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/dopaminelite_notifications
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SERVER_PORT: 8083
-    ports:
-      - "8083:8083"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 60s
-    networks:
-      - notifications-network
-    restart: unless-stopped
-
-  phppgadmin:
-    image: dockage/phppgadmin:latest
-    container_name: dopaminelite-phppgadmin
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      PHP_PG_ADMIN_SERVER_DESC: DopamineLite Notifications DB
-      PHP_PG_ADMIN_SERVER_HOST: postgres
-      PHP_PG_ADMIN_SERVER_PORT: 5432
-      PHP_PG_ADMIN_DEFAULT_LANG: en
-      PHP_PG_ADMIN_AUTO_USER: false
-    ports:
-      - "8080:80"
-    networks:
-      - notifications-network
-    restart: unless-stopped
+    stdin_open: true
+    tty: true
 
 volumes:
   postgres_data:
-    driver: local
-
-networks:
-  notifications-network:
-    driver: bridge
+  pgadmin_data:
+  maven_cache:

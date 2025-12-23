@@ -1,4 +1,4 @@
-package dopaminelite.notifications.entity;
+package dopaminelite.notifications.entity.enums;
 
 /**
  * Domain-level event types that trigger notifications.

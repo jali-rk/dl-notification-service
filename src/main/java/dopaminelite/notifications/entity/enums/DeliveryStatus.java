@@ -1,4 +1,4 @@
-package dopaminelite.notifications.entity;
+package dopaminelite.notifications.entity.enums;
 
 /**
  * Delivery status for non-IN_APP notification channels.

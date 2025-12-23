@@ -1,8 +1,8 @@
 package dopaminelite.notifications.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import dopaminelite.notifications.entity.DeliveryStatus;
-import dopaminelite.notifications.entity.NotificationChannel;
+import dopaminelite.notifications.entity.enums.DeliveryStatus;
+import dopaminelite.notifications.entity.enums.NotificationChannel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

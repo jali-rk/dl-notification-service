@@ -1,4 +1,4 @@
-package dopaminelite.notifications.entity;
+package dopaminelite.notifications.entity.enums;
 
 /**
  * Delivery channels for notifications.

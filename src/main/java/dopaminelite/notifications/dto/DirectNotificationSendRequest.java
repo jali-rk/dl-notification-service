@@ -1,7 +1,7 @@
 package dopaminelite.notifications.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import dopaminelite.notifications.entity.NotificationChannel;
+import dopaminelite.notifications.entity.enums.NotificationChannel;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import lombok.AllArgsConstructor;

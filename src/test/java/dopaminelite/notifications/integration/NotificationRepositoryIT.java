@@ -1,8 +1,8 @@
 package dopaminelite.notifications.integration;
 
-import dopaminelite.notifications.entity.DeliveryStatus;
 import dopaminelite.notifications.entity.Notification;
-import dopaminelite.notifications.entity.NotificationChannel;
+import dopaminelite.notifications.entity.enums.DeliveryStatus;
+import dopaminelite.notifications.entity.enums.NotificationChannel;
 import dopaminelite.notifications.repository.NotificationRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

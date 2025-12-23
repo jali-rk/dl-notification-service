@@ -1,6 +1,6 @@
-package dopaminelite.notifications.controller;
+package dopaminelite.notifications.exception;
 
-import dopaminelite.notifications.dto.ErrorObject;
+import dopaminelite.notifications.dto.common.ErrorObject;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -14,24 +14,41 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorObject> handleResourceNotFoundException(ResourceNotFoundException ex) {
+        log.warn("Resource not found: {}", ex.getMessage());
+        
+        ErrorObject error = ErrorObject.builder()
+            .code(String.valueOf(HttpStatus.NOT_FOUND.value()))
+            .message(ex.getMessage())
+            .build();
+        
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+    
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ErrorObject> handleRuntimeException(RuntimeException ex) {
         log.error("Runtime exception occurred", ex);
         
-        ErrorObject error = ErrorObject.builder()
-            .code("INTERNAL_ERROR")
-            .message(ex.getMessage())
-            .build();
-        
-        // Check if it's a not found exception
-        if (ex.getMessage() != null && ex.getMessage().contains("not found")) {
+        // Check if it's a not found exception (case-insensitive)
+        if (ex.getMessage() != null && Pattern.compile("not found", Pattern.CASE_INSENSITIVE).matcher(ex.getMessage()).find()) {
+            ErrorObject error = ErrorObject.builder()
+                .code(String.valueOf(HttpStatus.NOT_FOUND.value()))
+                .message(ex.getMessage())
+                .build();
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
         }
+        
+        ErrorObject error = ErrorObject.builder()
+            .code(String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR.value()))
+            .message(ex.getMessage())
+            .build();
         
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
@@ -47,7 +64,7 @@ public class GlobalExceptionHandler {
         });
         
         ErrorObject error = ErrorObject.builder()
-            .code("VALIDATION_ERROR")
+            .code(String.valueOf(HttpStatus.BAD_REQUEST.value()))
             .message("Validation failed")
             .details(details)
             .build();
@@ -66,7 +83,7 @@ public class GlobalExceptionHandler {
         }
         
         ErrorObject error = ErrorObject.builder()
-            .code("VALIDATION_ERROR")
+            .code(String.valueOf(HttpStatus.BAD_REQUEST.value()))
             .message("Validation failed")
             .details(details)
             .build();
@@ -82,7 +99,7 @@ public class GlobalExceptionHandler {
         details.put("requiredType", ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "unknown");
         
         ErrorObject error = ErrorObject.builder()
-            .code("INVALID_PARAMETER")
+            .code(String.valueOf(HttpStatus.BAD_REQUEST.value()))
             .message("Invalid parameter type")
             .details(details)
             .build();
@@ -95,7 +112,7 @@ public class GlobalExceptionHandler {
         log.error("Unexpected exception occurred", ex);
         
         ErrorObject error = ErrorObject.builder()
-            .code("INTERNAL_ERROR")
+            .code(String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR.value()))
             .message("An unexpected error occurred")
             .build();
         

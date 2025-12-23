@@ -1,4 +1,4 @@
-package dopaminelite.notifications.dto;
+package dopaminelite.notifications.dto.common;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

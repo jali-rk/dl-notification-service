@@ -1,5 +1,7 @@
 package dopaminelite.notifications.entity;
 
+import dopaminelite.notifications.entity.enums.DeliveryStatus;
+import dopaminelite.notifications.entity.enums.NotificationChannel;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;

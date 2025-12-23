@@ -1,0 +1,24 @@
+# Development Dockerfile with hot reloading support
+FROM maven:3.9-eclipse-temurin-21-alpine
+WORKDIR /app
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Copy pom.xml and download dependencies (cached layer)
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+
+# Note: src directory will be mounted as a volume from docker-compose
+# This allows hot reloading when files change
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:8080/actuator/health || exit 1
+
+# Run Spring Boot with Maven in development mode
+# This enables hot reloading with Spring DevTools
+CMD ["mvn", "spring-boot:run"]

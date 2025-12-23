@@ -1,7 +1,7 @@
 package dopaminelite.notifications.repository;
 
 import dopaminelite.notifications.entity.DeliveryOutbox;
-import dopaminelite.notifications.entity.DeliveryStatus;
+import dopaminelite.notifications.entity.enums.DeliveryStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
