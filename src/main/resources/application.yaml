@@ -2,25 +2,39 @@ spring:
   application:
     name: notifications
 
+  # DevTools Configuration for Hot Reloading (Disabled automatically when running as a .jar)
+  devtools:
+    restart:
+      enabled: true
+      additional-paths: src/main/java,src/main/resources
+    livereload:
+      enabled: true
+
+  # Liquibase configuration
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+          lob:
+            non_contextual_creation: true
+
   # Database Configuration
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
-
-  # JPA Configuration
-  jpa:
-    hibernate:
-      ddl-auto: none
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        jdbc:
-          lob:
-            non_contextual_creation: true
 
   # Mail Configuration for AWS SES SMTP
   mail:
@@ -44,11 +58,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
-      base-path: /
+        include: health,info,metrics,prometheus
+      base-path: /actuator
   endpoint:
     health:
-      show-details: always
+      show-details: when-authorized
       probes:
         enabled: true
   health:
@@ -60,6 +74,8 @@ management:
 # Server Configuration
 server:
   port: 8080
+  servlet:
+    context-path: /notifications
 
 # Email (SES SMTP) Configuration
 notifications:
@@ -68,5 +84,3 @@ notifications:
     region: ${NOTIFICATIONS_EMAIL_REGION:ap-south-1}
   bff:
     base-url: ${BFF_BASE_URL}
-
-# Liquibase uses default changelog path classpath:/db/changelog/db.changelog-master.yaml
