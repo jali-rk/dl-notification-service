@@ -63,11 +63,8 @@ management:
   endpoint:
     health:
       show-details: when-authorized
-      probes:
-        enabled: true
+      show-components: when-authorized
   health:
-    db:
-      enabled: true
     defaults:
       enabled: true
 
