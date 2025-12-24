@@ -9,6 +9,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.UUID;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -21,7 +23,9 @@ class DirectSendControllerTest {
     @Test
     @DisplayName("POST /api/v1/notifications/send accepts direct send")
     void sendDirectNotifications() throws Exception {
-        Mockito.doNothing().when(notificationService).sendDirectNotifications(Mockito.any());
+        UUID broadcastId = UUID.randomUUID();
+        Mockito.when(notificationService.sendDirectNotifications(Mockito.any(), Mockito.any()))
+            .thenReturn(broadcastId);
 
         String json = "{" +
                 "\"targetUserIds\":[\"c0a80101-0000-0000-0000-000000000001\"]," +
@@ -33,6 +37,7 @@ class DirectSendControllerTest {
         mockMvc.perform(post("/api/v1/notifications/send")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
-                .andExpect(status().isAccepted());
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.broadcastId").exists());
     }
 }

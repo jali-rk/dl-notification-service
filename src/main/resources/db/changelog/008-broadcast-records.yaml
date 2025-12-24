@@ -1,0 +1,86 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-01-broadcast-records-table
+      author: copilot
+      changes:
+        - createTable:
+            tableName: broadcast_records
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: template_id
+                  type: uuid
+              - column:
+                  name: title
+                  type: varchar(500)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: body
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: channels
+                  type: jsonb
+                  constraints:
+                    nullable: false
+              - column:
+                  name: recipient_count
+                  type: integer
+                  defaultValue: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: success_count
+                  type: integer
+                  defaultValue: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: failure_count
+                  type: integer
+                  defaultValue: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sent_by
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sent_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+              - column:
+                  name: metadata
+                  type: jsonb
+
+  - changeSet:
+      id: 008-02-broadcast-records-indexes
+      author: copilot
+      changes:
+        - createIndex:
+            indexName: idx_broadcast_sent_by
+            tableName: broadcast_records
+            columns:
+              - column:
+                  name: sent_by
+        - createIndex:
+            indexName: idx_broadcast_sent_at
+            tableName: broadcast_records
+            columns:
+              - column:
+                  name: sent_at
+        - createIndex:
+            indexName: idx_broadcast_template_id
+            tableName: broadcast_records
+            columns:
+              - column:
+                  name: template_id

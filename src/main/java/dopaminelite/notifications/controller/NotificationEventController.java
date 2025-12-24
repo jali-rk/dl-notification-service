@@ -28,9 +28,13 @@ public class NotificationEventController {
      */
     @PostMapping
     public ResponseEntity<Void> processNotificationEvent(
-        @Valid @RequestBody NotificationEventRequest request
+        @Valid @RequestBody NotificationEventRequest request,
+        @RequestHeader(value = "Authorization", required = true) String authorization
     ) {
-        notificationService.processNotificationEvent(request);
+        // Extract bearer token from Authorization header
+        String bearerToken = authorization.startsWith("Bearer ") ? authorization.substring(7) : authorization;
+        
+        notificationService.processNotificationEvent(request, bearerToken);
         return ResponseEntity.status(HttpStatus.ACCEPTED).build();
     }
 }

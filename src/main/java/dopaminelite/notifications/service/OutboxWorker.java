@@ -1,6 +1,5 @@
 package dopaminelite.notifications.service;
 
-import dopaminelite.notifications.client.UserServiceClient;
 import dopaminelite.notifications.entity.DeliveryOutbox;
 import dopaminelite.notifications.entity.Notification;
 import dopaminelite.notifications.entity.enums.NotificationChannel;
@@ -29,7 +28,6 @@ public class OutboxWorker {
     private final DeliveryOutboxRepository outboxRepository;
     private final NotificationRepository notificationRepository;
     private final EmailService emailService;
-    private final UserServiceClient userServiceClient;
 
     /**
      * Polls pending/failed outbox entries and attempts delivery.
@@ -63,7 +61,7 @@ public class OutboxWorker {
         }
 
         try {
-            deliverNotification(notification, outbox.getChannel());
+            deliverNotification(notification, outbox.getChannel(), outbox.getRecipientEmail());
             
             // Success: mark outbox as sent
             outbox.setStatus(DeliveryStatus.SENT);
@@ -96,10 +94,9 @@ public class OutboxWorker {
         }
     }
 
-    private void deliverNotification(Notification notification, NotificationChannel channel) {
+    private void deliverNotification(Notification notification, NotificationChannel channel, String recipientEmail) {
         switch (channel) {
             case EMAIL:
-                String recipientEmail = userServiceClient.getUserEmail(notification.getUserId());
                 emailService.sendEmail(recipientEmail, notification.getTitle(), notification.getBody());
                 break;
             case WHATSAPP:

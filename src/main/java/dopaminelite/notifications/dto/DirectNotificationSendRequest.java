@@ -16,6 +16,7 @@ import java.util.UUID;
 /**
  * Direct ad-hoc send request, typically initiated by admins via BFF.
  * Supports multi-channel sends to a set of target users.
+ * User details are fetched from BFF's /users/{userId}/public endpoint.
  */
 @Data
 @Builder

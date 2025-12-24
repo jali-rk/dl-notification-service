@@ -28,9 +28,11 @@ class NotificationEventControllerTest {
     @Test
     @DisplayName("POST /api/v1/notification-events accepts event")
     void processNotificationEvent() throws Exception {
+        UUID userId = UUID.randomUUID();
+        
         NotificationEventRequest req = NotificationEventRequest.builder()
                 .eventType(NotificationEventType.PAYMENT_STATUS_CHANGED)
-                .primaryUserId(UUID.randomUUID())
+                .primaryUserId(userId)
                 .channels(List.of(NotificationChannel.EMAIL, NotificationChannel.IN_APP))
                 .payload(Map.of("submissionId", "abc", "oldStatus", "PENDING", "newStatus", "APPROVED"))
                 .build();
@@ -39,7 +41,7 @@ class NotificationEventControllerTest {
 
         String json = "{" +
                 "\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
-                "\"primaryUserId\":\"" + req.getPrimaryUserId() + "\"," +
+                "\"primaryUserId\":\"" + userId + "\"," +
                 "\"channels\":[\"EMAIL\",\"IN_APP\"]," +
                 "\"payload\":{\"submissionId\":\"abc\",\"oldStatus\":\"PENDING\",\"newStatus\":\"APPROVED\"}" +
                 "}";

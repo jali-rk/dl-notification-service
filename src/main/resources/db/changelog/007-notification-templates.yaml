@@ -1,0 +1,86 @@
+databaseChangeLog:
+  - changeSet:
+      id: 007-01-notification-templates-table
+      author: copilot
+      changes:
+        - createTable:
+            tableName: notification_templates
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: template_id
+                  type: varchar(100)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: template_name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: type
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: content_sinhala
+                  type: text
+              - column:
+                  name: content_english
+                  type: text
+              - column:
+                  name: channels
+                  type: jsonb
+              - column:
+                  name: metadata
+                  type: jsonb
+              - column:
+                  name: sent_times
+                  type: integer
+                  defaultValue: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 007-02-notification-templates-indexes
+      author: copilot
+      changes:
+        - createIndex:
+            indexName: idx_template_type
+            tableName: notification_templates
+            columns:
+              - column:
+                  name: type
+        - createIndex:
+            indexName: idx_template_created_by
+            tableName: notification_templates
+            columns:
+              - column:
+                  name: created_by
+        - createIndex:
+            indexName: idx_template_created_at
+            tableName: notification_templates
+            columns:
+              - column:
+                  name: created_at

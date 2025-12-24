@@ -1,0 +1,12 @@
+databaseChangeLog:
+  - changeSet:
+      id: add-recipient-email-to-delivery-outbox
+      author: system
+      changes:
+        - addColumn:
+            tableName: delivery_outbox
+            columns:
+              - column:
+                  name: recipient_email
+                  type: varchar(255)
+                  remarks: "Email address of the recipient for delivery, provided by BFF to avoid User Service lookups"

@@ -1,15 +1,17 @@
 package dopaminelite.notifications.service;
 
-import dopaminelite.notifications.client.UserServiceClient;
 import dopaminelite.notifications.dto.DirectNotificationSendRequest;
 import dopaminelite.notifications.dto.NotificationEventRequest;
+import dopaminelite.notifications.dto.UserPublicDataDto;
 import dopaminelite.notifications.entity.DeliveryOutbox;
 import dopaminelite.notifications.entity.Notification;
 import dopaminelite.notifications.entity.enums.DeliveryStatus;
 import dopaminelite.notifications.entity.enums.NotificationChannel;
 import dopaminelite.notifications.entity.enums.NotificationEventType;
+import dopaminelite.notifications.repository.BroadcastRecordRepository;
 import dopaminelite.notifications.repository.DeliveryOutboxRepository;
 import dopaminelite.notifications.repository.NotificationRepository;
+import dopaminelite.notifications.repository.NotificationTemplateRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,17 +45,30 @@ class NotificationServiceTest {
     private EmailService sesEmailService;
 
     @Mock
-    private UserServiceClient userServiceClient;
+    private NotificationTemplateRepository templateRepository;
+
+    @Mock
+    private BroadcastRecordRepository broadcastRepository;
+
+    @Mock
+    private BffClientService bffClientService;
 
     @InjectMocks
     private NotificationService notificationService;
 
     private UUID userId;
+    private UserPublicDataDto userData;
     private Notification notification;
 
     @BeforeEach
     void setUp() {
         userId = UUID.randomUUID();
+        userData = UserPublicDataDto.builder()
+            .fullName("Test User")
+            .email("user@example.com")
+            .whatsappNumber("+94771234567")
+            .codeNumber("123456")
+            .build();
         notification = new Notification();
         notification.setId(UUID.randomUUID());
         notification.setUserId(userId);
@@ -88,9 +103,9 @@ class NotificationServiceTest {
         request.setEventType(NotificationEventType.STUDENT_VERIFIED);
         request.setChannels(List.of(NotificationChannel.EMAIL));
 
+        when(bffClientService.getUserPublicData(userId)).thenReturn(userData);
         when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
         when(deliveryOutboxRepository.save(any(DeliveryOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(userServiceClient.getUserEmail(userId)).thenReturn("user@example.com");
 
         notificationService.processNotificationEvent(request);
 
@@ -100,11 +115,12 @@ class NotificationServiceTest {
         Notification saved = notifCaptor.getAllValues().get(0);
         assertThat(saved.getChannel()).isEqualTo(NotificationChannel.EMAIL);
 
-        // Verify outbox entry created
+        // Verify outbox entry created with email
         ArgumentCaptor<DeliveryOutbox> outboxCaptor = ArgumentCaptor.forClass(DeliveryOutbox.class);
         verify(deliveryOutboxRepository).save(outboxCaptor.capture());
         DeliveryOutbox outbox = outboxCaptor.getValue();
         assertThat(outbox.getChannel()).isEqualTo(NotificationChannel.EMAIL);
+        assertThat(outbox.getRecipientEmail()).isEqualTo("user@example.com");
         assertThat(outbox.getStatus()).isEqualTo(DeliveryStatus.PENDING);
         assertThat(outbox.getRetryCount()).isEqualTo(0);
         assertThat(outbox.getMaxRetries()).isEqualTo(3);
@@ -118,6 +134,7 @@ class NotificationServiceTest {
         request.setEventType(NotificationEventType.ISSUE_MESSAGE_NEW);
         request.setChannels(List.of(NotificationChannel.IN_APP));
 
+        when(bffClientService.getUserPublicData(userId)).thenReturn(userData);
         when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
 
         notificationService.processNotificationEvent(request);
@@ -129,10 +146,9 @@ class NotificationServiceTest {
     @Test
     @DisplayName("Should deliver EMAIL notification and update status to SENT")
     void deliverNotificationSuccess() {
-        when(userServiceClient.getUserEmail(userId)).thenReturn("user@example.com");
         when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        notificationService.deliverNotification(notification);
+        notificationService.deliverNotification(notification, "user@example.com");
 
         verify(sesEmailService).sendEmail("user@example.com", "Test Title", "Test Body");
         verify(notificationRepository).save(argThat(n -> n.getDeliveryStatus() == DeliveryStatus.SENT));
@@ -141,11 +157,10 @@ class NotificationServiceTest {
     @Test
     @DisplayName("Should mark notification FAILED on delivery exception")
     void deliverNotificationFailure() {
-        when(userServiceClient.getUserEmail(userId)).thenReturn("user@example.com");
         doThrow(new RuntimeException("SES error")).when(sesEmailService).sendEmail(anyString(), anyString(), anyString());
         when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        notificationService.deliverNotification(notification);
+        notificationService.deliverNotification(notification, "user@example.com");
 
         verify(notificationRepository).save(argThat(n -> n.getDeliveryStatus() == DeliveryStatus.FAILED));
     }
@@ -153,20 +168,25 @@ class NotificationServiceTest {
     @Test
     @DisplayName("Should send direct notifications and enqueue outbox for each user+channel")
     void sendDirectNotifications() {
-        UUID user1 = UUID.randomUUID();
-        UUID user2 = UUID.randomUUID();
+        UUID user1Id = UUID.randomUUID();
+        UUID user2Id = UUID.randomUUID();
+        UserPublicDataDto user1Data = UserPublicDataDto.builder().fullName("User 1").email("user1@example.com").build();
+        UserPublicDataDto user2Data = UserPublicDataDto.builder().fullName("User 2").email("user2@example.com").build();
 
         DirectNotificationSendRequest request = new DirectNotificationSendRequest();
-        request.setTargetUserIds(List.of(user1, user2));
+        request.setTargetUserIds(List.of(user1Id, user2Id));
         request.setChannels(List.of(NotificationChannel.EMAIL, NotificationChannel.IN_APP));
         request.setTitle("Broadcast");
         request.setBody("Message");
 
+        when(bffClientService.getUserPublicData(user1Id)).thenReturn(user1Data);
+        when(bffClientService.getUserPublicData(user2Id)).thenReturn(user2Data);
         when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
         when(deliveryOutboxRepository.save(any(DeliveryOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(userServiceClient.getUserEmail(any())).thenReturn("user@example.com");
+        when(broadcastRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        notificationService.sendDirectNotifications(request);
+        UUID sentBy = UUID.randomUUID();
+        notificationService.sendDirectNotifications(request, sentBy);
 
         // 2 users * 2 channels = 4 notifications created + 2 EMAIL delivery saves = 6 total
         verify(notificationRepository, times(6)).save(any(Notification.class));
@@ -182,11 +202,10 @@ class NotificationServiceTest {
         // Arrange
         notification.setTitle("Important Update");
         notification.setBody("Your account has been verified");
-        when(userServiceClient.getUserEmail(userId)).thenReturn("john.doe@example.com");
         when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
 
         // Act
-        notificationService.deliverNotification(notification);
+        notificationService.deliverNotification(notification, "john.doe@example.com");
 
         // Assert
         verify(sesEmailService).sendEmail("john.doe@example.com", "Important Update", "Your account has been verified");
@@ -196,18 +215,16 @@ class NotificationServiceTest {
     }
 
     @Test
-    @DisplayName("deliverNotification EMAIL channel with UserService failure uses fallback email")
-    void deliverNotification_emailChannel_withUserServiceFailure_usesFallbackEmail() {
+    @DisplayName("deliverNotification EMAIL channel with invalid email marks as FAILED")
+    void deliverNotification_emailChannel_withInvalidEmail_marksFailed() {
         // Arrange
-        when(userServiceClient.getUserEmail(userId)).thenThrow(new RuntimeException("User service unavailable"));
+        doThrow(new RuntimeException("Invalid email")).when(sesEmailService).sendEmail(anyString(), anyString(), anyString());
         when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
 
         // Act
-        notificationService.deliverNotification(notification);
+        notificationService.deliverNotification(notification, "invalid-email");
 
         // Assert
-        // Should still attempt SES send with fallback email (based on NotificationService implementation)
-        // The fallback logic should be in NotificationService
         ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
         verify(notificationRepository).save(captor.capture());
         assertThat(captor.getValue().getDeliveryStatus()).isEqualTo(DeliveryStatus.FAILED);
@@ -219,11 +236,10 @@ class NotificationServiceTest {
         // Arrange
         notification.setTitle("");
         notification.setBody("Body content");
-        when(userServiceClient.getUserEmail(userId)).thenReturn("user@example.com");
         when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
 
         // Act
-        notificationService.deliverNotification(notification);
+        notificationService.deliverNotification(notification, "user@example.com");
 
         // Assert
         verify(sesEmailService).sendEmail("user@example.com", "", "Body content");
@@ -236,11 +252,10 @@ class NotificationServiceTest {
         // Arrange
         notification.setTitle(null);
         notification.setBody("Body content");
-        when(userServiceClient.getUserEmail(userId)).thenReturn("user@example.com");
         when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
 
         // Act
-        notificationService.deliverNotification(notification);
+        notificationService.deliverNotification(notification, "user@example.com");
 
         // Assert
         verify(sesEmailService).sendEmail("user@example.com", null, "Body content");
@@ -256,15 +271,15 @@ class NotificationServiceTest {
         request.setEventType(NotificationEventType.STUDENT_VERIFIED);
         request.setChannels(List.of(NotificationChannel.EMAIL));
 
+        when(bffClientService.getUserPublicData(userId)).thenReturn(userData);
         when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
         when(deliveryOutboxRepository.save(any(DeliveryOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(userServiceClient.getUserEmail(userId)).thenReturn("student@example.com");
 
         // Act
         notificationService.processNotificationEvent(request);
 
         // Assert
-        verify(sesEmailService).sendEmail(eq("student@example.com"), anyString(), anyString());
+        verify(sesEmailService).sendEmail(eq("user@example.com"), anyString(), anyString());
         ArgumentCaptor<Notification> notifCaptor = ArgumentCaptor.forClass(Notification.class);
         verify(notificationRepository, atLeastOnce()).save(notifCaptor.capture());
 
@@ -284,15 +299,15 @@ class NotificationServiceTest {
         request.setChannels(List.of(NotificationChannel.EMAIL));
         request.setPayload(java.util.Map.of("status", "COMPLETED", "amount", "100.00"));
 
+        when(bffClientService.getUserPublicData(userId)).thenReturn(userData);
         when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
         when(deliveryOutboxRepository.save(any(DeliveryOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(userServiceClient.getUserEmail(userId)).thenReturn("customer@example.com");
 
         // Act
         notificationService.processNotificationEvent(request);
 
         // Assert
-        verify(sesEmailService).sendEmail(eq("customer@example.com"), anyString(), anyString());
+        verify(sesEmailService).sendEmail(eq("user@example.com"), anyString(), anyString());
 
         // Verify notification contains event-specific content
         ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
@@ -305,24 +320,29 @@ class NotificationServiceTest {
     @DisplayName("sendDirectNotifications multiple users calls SES for each EMAIL notification")
     void sendDirectNotifications_multipleUsers_callsSesForEachUser() {
         // Arrange
-        UUID user1 = UUID.randomUUID();
-        UUID user2 = UUID.randomUUID();
-        UUID user3 = UUID.randomUUID();
+        UUID user1Id = UUID.randomUUID();
+        UUID user2Id = UUID.randomUUID();
+        UUID user3Id = UUID.randomUUID();
+        UserPublicDataDto user1Data = UserPublicDataDto.builder().fullName("User 1").email("user1@example.com").build();
+        UserPublicDataDto user2Data = UserPublicDataDto.builder().fullName("User 2").email("user2@example.com").build();
+        UserPublicDataDto user3Data = UserPublicDataDto.builder().fullName("User 3").email("user3@example.com").build();
 
         DirectNotificationSendRequest request = new DirectNotificationSendRequest();
-        request.setTargetUserIds(List.of(user1, user2, user3));
+        request.setTargetUserIds(List.of(user1Id, user2Id, user3Id));
         request.setChannels(List.of(NotificationChannel.EMAIL));
         request.setTitle("System Maintenance");
         request.setBody("Scheduled downtime at 2 AM");
 
+        when(bffClientService.getUserPublicData(user1Id)).thenReturn(user1Data);
+        when(bffClientService.getUserPublicData(user2Id)).thenReturn(user2Data);
+        when(bffClientService.getUserPublicData(user3Id)).thenReturn(user3Data);
         when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
         when(deliveryOutboxRepository.save(any(DeliveryOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(userServiceClient.getUserEmail(user1)).thenReturn("user1@example.com");
-        when(userServiceClient.getUserEmail(user2)).thenReturn("user2@example.com");
-        when(userServiceClient.getUserEmail(user3)).thenReturn("user3@example.com");
+        when(broadcastRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         // Act
-        notificationService.sendDirectNotifications(request);
+        UUID sentBy = UUID.randomUUID();
+        notificationService.sendDirectNotifications(request, sentBy);
 
         // Assert
         verify(sesEmailService).sendEmail("user1@example.com", "System Maintenance", "Scheduled downtime at 2 AM");
@@ -335,27 +355,30 @@ class NotificationServiceTest {
     @DisplayName("sendDirectNotifications with mixed channels only calls SES for EMAIL")
     void sendDirectNotifications_mixedChannels_onlyCallsSesForEmail() {
         // Arrange
-        UUID user1 = UUID.randomUUID();
+        UUID user1Id = UUID.randomUUID();
+        UserPublicDataDto user1Data = UserPublicDataDto.builder().fullName("User").email("user@example.com").build();
 
         DirectNotificationSendRequest request = new DirectNotificationSendRequest();
-        request.setTargetUserIds(List.of(user1));
+        request.setTargetUserIds(List.of(user1Id));
         request.setChannels(List.of(NotificationChannel.EMAIL, NotificationChannel.IN_APP, NotificationChannel.WHATSAPP));
         request.setTitle("Multi-channel Test");
         request.setBody("Testing channels");
 
+        when(bffClientService.getUserPublicData(user1Id)).thenReturn(user1Data);
         when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
         when(deliveryOutboxRepository.save(any(DeliveryOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(userServiceClient.getUserEmail(user1)).thenReturn("user@example.com");
+        when(broadcastRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         // Act
-        notificationService.sendDirectNotifications(request);
+        UUID sentBy = UUID.randomUUID();
+        notificationService.sendDirectNotifications(request, sentBy);
 
         // Assert
         // SES should only be called for EMAIL channel, not for IN_APP or WHATSAPP
         verify(sesEmailService, times(1)).sendEmail("user@example.com", "Multi-channel Test", "Testing channels");
 
-        // Verify 3 notifications created (one per channel)
-        verify(notificationRepository, times(5)).save(any(Notification.class)); // 3 created + 1 EMAIL delivery save + 1 WHATSAPP
+        // Verify 3 notifications created (one per channel) + 2 for delivery (EMAIL + WHATSAPP) + 2 for broadcast updates = 7 total
+        verify(notificationRepository, times(5)).save(any(Notification.class));
 
         // Verify only EMAIL and WHATSAPP enqueued to outbox (IN_APP is immediate)
         verify(deliveryOutboxRepository, times(2)).save(any(DeliveryOutbox.class));

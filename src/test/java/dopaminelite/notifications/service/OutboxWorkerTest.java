@@ -1,6 +1,5 @@
 package dopaminelite.notifications.service;
 
-import dopaminelite.notifications.client.UserServiceClient;
 import dopaminelite.notifications.entity.DeliveryOutbox;
 import dopaminelite.notifications.entity.Notification;
 import dopaminelite.notifications.entity.enums.DeliveryStatus;
@@ -41,9 +40,6 @@ class OutboxWorkerTest {
     @Mock
     private EmailService sesEmailService;
 
-    @Mock
-    private UserServiceClient userServiceClient;
-
     @InjectMocks
     private OutboxWorker outboxWorker;
 
@@ -71,6 +67,7 @@ class OutboxWorkerTest {
         testOutbox.setId(UUID.randomUUID());
         testOutbox.setNotificationId(notificationId);
         testOutbox.setChannel(NotificationChannel.EMAIL);
+        testOutbox.setRecipientEmail("user@example.com");
         testOutbox.setStatus(DeliveryStatus.PENDING);
         testOutbox.setRetryCount(0);
         testOutbox.setMaxRetries(3);
@@ -85,8 +82,6 @@ class OutboxWorkerTest {
                 .thenReturn(Collections.singletonList(testOutbox));
         when(notificationRepository.findById(notificationId))
                 .thenReturn(Optional.of(testNotification));
-        when(userServiceClient.getUserEmail(userId))
-                .thenReturn("user@example.com");
         doNothing().when(sesEmailService).sendEmail(anyString(), anyString(), anyString());
 
         // Act
@@ -116,9 +111,7 @@ class OutboxWorkerTest {
                 .thenReturn(Collections.singletonList(testOutbox));
         when(notificationRepository.findById(notificationId))
                 .thenReturn(Optional.of(testNotification));
-        when(userServiceClient.getUserEmail(userId))
-                .thenReturn("user@example.com");
-        doThrow(new MailSendException("Rate limit exceeded"))
+        doThrow(new MailSendException("Temporary failure"))
                 .when(sesEmailService).sendEmail(anyString(), anyString(), anyString());
 
         // Act
@@ -132,7 +125,7 @@ class OutboxWorkerTest {
         assertEquals(1, savedOutbox.getRetryCount());
         assertEquals(DeliveryStatus.FAILED, savedOutbox.getStatus());
         assertNotNull(savedOutbox.getLastError());
-        assertTrue(savedOutbox.getLastError().contains("Rate limit exceeded"));
+        assertTrue(savedOutbox.getLastError().contains("Temporary failure"));
         assertNotNull(savedOutbox.getNextRetryAt());
         assertTrue(savedOutbox.getNextRetryAt().isAfter(Instant.now()));
     }
@@ -148,8 +141,6 @@ class OutboxWorkerTest {
                 .thenReturn(Collections.singletonList(testOutbox));
         when(notificationRepository.findById(notificationId))
                 .thenReturn(Optional.of(testNotification));
-        when(userServiceClient.getUserEmail(userId))
-                .thenReturn("user@example.com");
         doThrow(new MailSendException("Permanent failure"))
                 .when(sesEmailService).sendEmail(anyString(), anyString(), anyString());
 
@@ -182,8 +173,6 @@ class OutboxWorkerTest {
                 .thenReturn(Collections.singletonList(testOutbox));
         when(notificationRepository.findById(notificationId))
                 .thenReturn(Optional.of(testNotification));
-        when(userServiceClient.getUserEmail(userId))
-                .thenReturn("user@example.com");
         doThrow(new MailSendException("Temporary failure"))
                 .when(sesEmailService).sendEmail(anyString(), anyString(), anyString());
 
@@ -206,15 +195,18 @@ class OutboxWorkerTest {
     }
 
     @Test
-    @DisplayName("processPending with user service failure retries with fallback email")
-    void processPending_userServiceFailure_retriesWithFallbackEmail() {
+    @DisplayName("processPending with null email in outbox marks as failed")
+    void processPending_nullEmailInOutbox_marksFailed() {
         // Arrange
+        testOutbox.setRecipientEmail(null);
         when(outboxRepository.findByStatusInAndNextRetryAtBefore(any(), any()))
                 .thenReturn(Collections.singletonList(testOutbox));
         when(notificationRepository.findById(notificationId))
                 .thenReturn(Optional.of(testNotification));
-        when(userServiceClient.getUserEmail(userId))
-                .thenThrow(new RuntimeException("User service unavailable"));
+        
+        // Sending email with null address will throw exception
+        doThrow(new RuntimeException("Recipient email is null"))
+                .when(sesEmailService).sendEmail(isNull(), anyString(), anyString());
 
         // Act
         outboxWorker.processPending();
@@ -225,7 +217,7 @@ class OutboxWorkerTest {
 
         DeliveryOutbox savedOutbox = outboxCaptor.getValue();
 
-        // Should fail and increment retry count since user service failed
+        // Should fail since email is null and increment retry
         assertEquals(1, savedOutbox.getRetryCount());
         assertEquals(DeliveryStatus.FAILED, savedOutbox.getStatus());
         assertNotNull(savedOutbox.getLastError());
@@ -296,9 +288,6 @@ class OutboxWorkerTest {
         when(notificationRepository.findById(outbox3.getNotificationId()))
                 .thenReturn(Optional.of(notification3));
 
-        when(userServiceClient.getUserEmail(any()))
-                .thenReturn("user@example.com");
-
         // Act
         outboxWorker.processPending();
 
@@ -314,6 +303,7 @@ class OutboxWorkerTest {
         outbox.setId(UUID.randomUUID());
         outbox.setNotificationId(UUID.randomUUID());
         outbox.setChannel(NotificationChannel.EMAIL);
+        outbox.setRecipientEmail("user@example.com");
         outbox.setStatus(DeliveryStatus.PENDING);
         outbox.setRetryCount(0);
         outbox.setMaxRetries(3);

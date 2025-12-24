@@ -30,6 +30,9 @@ public class DeliveryOutbox extends BaseEntity {
     @Column(name = "channel", nullable = false, length = 20)
     private NotificationChannel channel;
 
+    @Column(name = "recipient_email", length = 255)
+    private String recipientEmail;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private DeliveryStatus status;

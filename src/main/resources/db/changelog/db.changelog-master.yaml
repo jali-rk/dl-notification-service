@@ -7,3 +7,9 @@ databaseChangeLog:
       file: classpath:db/changelog/004-inbox-view.yaml
   - include:
       file: classpath:db/changelog/005-delivery-outbox-table.yaml
+  - include:
+      file: classpath:db/changelog/006-add-recipient-email.yaml
+  - include:
+      file: classpath:db/changelog/007-notification-templates.yaml
+  - include:
+      file: classpath:db/changelog/008-broadcast-records.yaml

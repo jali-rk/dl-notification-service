@@ -1,14 +1,18 @@
 package dopaminelite.notifications.service;
 
-import dopaminelite.notifications.client.UserServiceClient;
 import dopaminelite.notifications.dto.*;
+import dopaminelite.notifications.entity.BroadcastRecord;
 import dopaminelite.notifications.entity.DeliveryOutbox;
 import dopaminelite.notifications.entity.Notification;
+import dopaminelite.notifications.entity.NotificationTemplate;
 import dopaminelite.notifications.entity.enums.DeliveryStatus;
 import dopaminelite.notifications.entity.enums.NotificationChannel;
 import dopaminelite.notifications.exception.ResourceNotFoundException;
+import dopaminelite.notifications.exception.ValidationException;
+import dopaminelite.notifications.repository.BroadcastRecordRepository;
 import dopaminelite.notifications.repository.DeliveryOutboxRepository;
 import dopaminelite.notifications.repository.NotificationRepository;
+import dopaminelite.notifications.repository.NotificationTemplateRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -19,7 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Core business logic for notifications.
@@ -38,7 +45,9 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final DeliveryOutboxRepository deliveryOutboxRepository;
     private final EmailService emailService;
-    private final UserServiceClient userServiceClient;
+    private final NotificationTemplateRepository templateRepository;
+    private final BroadcastRecordRepository broadcastRepository;
+    private final BffClientService bffClientService;
     
     /**
      * List notifications for a user with optional filters.
@@ -124,33 +133,279 @@ public class NotificationService {
      * Non-IN_APP channels are queued for delivery via outbox (future work).
      */
     @Transactional
-    public void processNotificationEvent(NotificationEventRequest request) {
+    public void processNotificationEvent(NotificationEventRequest request, String bearerToken) {
         log.info("Processing notification event: {} for user: {}", 
             request.getEventType(), request.getPrimaryUserId());
+        
+        // Fetch user details from BFF
+        UserPublicDataDto userData = bffClientService.getUserPublicData(request.getPrimaryUserId(), bearerToken);
         
         List<NotificationChannel> channels = request.getChannels();
         if (channels == null || channels.isEmpty()) {
             channels = getDefaultChannelsForEventType(request.getEventType());
         }
         
+        // Validate that email exists for email channel
+        if (channels.contains(NotificationChannel.EMAIL) && 
+            (userData.getEmail() == null || userData.getEmail().isBlank())) {
+            log.warn("User {} has no email address, will skip email notification", 
+                request.getPrimaryUserId());
+        }
+        
         for (NotificationChannel channel : channels) {
-            createNotificationForChannel(request, channel);
+            // Skip email channel if no email address
+            if (channel == NotificationChannel.EMAIL && 
+                (userData.getEmail() == null || userData.getEmail().isBlank())) {
+                log.warn("Skipping email notification for user {} - no email address", 
+                    request.getPrimaryUserId());
+                continue;
+            }
+            createNotificationForChannel(request, channel, userData);
         }
     }
     
     /**
      * Send direct notifications to multiple users.
      * Supports multi-channel sends similar to event processing.
+     * Creates a broadcast record to track the send operation.
      */
     @Transactional
-    public void sendDirectNotifications(DirectNotificationSendRequest request) {
+    public UUID sendDirectNotifications(DirectNotificationSendRequest request, UUID sentBy, String bearerToken) {
         log.info("Sending direct notifications to {} users via {} channels", 
             request.getTargetUserIds().size(), request.getChannels());
         
+        // Create broadcast record
+        BroadcastRecord broadcast = createBroadcastRecord(
+            null, // no template
+            request.getTitle(),
+            request.getBody(),
+            request.getChannels(),
+            request.getTargetUserIds().size() * request.getChannels().size(),
+            sentBy,
+            request.getMetadata()
+        );
+        
+        int successCount = 0;
+        int failureCount = 0;
+        
         for (UUID userId : request.getTargetUserIds()) {
-            for (NotificationChannel channel : request.getChannels()) {
-                createDirectNotification(userId, channel, request);
+            try {
+                // Fetch user data from BFF
+                UserPublicDataDto userData = bffClientService.getUserPublicData(userId, bearerToken);
+                
+                // Validate that email exists for email channel
+                if (request.getChannels().contains(NotificationChannel.EMAIL) && 
+                    (userData.getEmail() == null || userData.getEmail().isBlank())) {
+                    log.warn("User {} has no email address, skipping email notification", userId);
+                    failureCount += (int) request.getChannels().stream()
+                        .filter(ch -> ch == NotificationChannel.EMAIL)
+                        .count();
+                }
+                
+                for (NotificationChannel channel : request.getChannels()) {
+                    try {
+                        // Skip email channel if no email address
+                        if (channel == NotificationChannel.EMAIL && 
+                            (userData.getEmail() == null || userData.getEmail().isBlank())) {
+                            continue;
+                        }
+                        createDirectNotification(userId, userData.getEmail(), channel, request);
+                        successCount++;
+                    } catch (Exception e) {
+                        log.error("Failed to create notification for user {} channel {}", userId, channel, e);
+                        failureCount++;
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to fetch user data for user {}", userId, e);
+                failureCount += request.getChannels().size();
             }
+        }
+        
+        // Update broadcast stats
+        updateBroadcastStats(broadcast, successCount, failureCount);
+        
+        return broadcast.getId();
+    }
+    
+    /**
+     * Send notifications using a template.
+     * Supports placeholder replacement for personalized templates.
+     */
+    @Transactional
+    public UUID sendFromTemplate(SendFromTemplateRequest request, UUID sentBy, String bearerToken) {
+        // Get template
+        NotificationTemplate template = templateRepository.findById(request.getTemplateId())
+            .orElseThrow(() -> new ResourceNotFoundException("Template not found: " + request.getTemplateId()));
+        
+        // Determine channels (use request channels or template defaults)
+        List<NotificationChannel> channels = request.getChannels() != null && !request.getChannels().isEmpty()
+            ? request.getChannels()
+            : template.getChannels();
+        
+        if (channels == null || channels.isEmpty()) {
+            throw new ValidationException("No channels specified for template-based send");
+        }
+        
+        log.info("Sending notifications from template {} to {} users via {} channels",
+            template.getTemplateName(), request.getTargetUserIds().size(), channels);
+        
+        // Use English content as default (can be enhanced to support language selection)
+        String contentTemplate = template.getContentEnglish() != null 
+            ? template.getContentEnglish() 
+            : template.getContentSinhala();
+        
+        if (contentTemplate == null || contentTemplate.isBlank()) {
+            throw new ValidationException("Template has no content");
+        }
+        
+        // Create broadcast record
+        BroadcastRecord broadcast = createBroadcastRecord(
+            template.getId(),
+            template.getTemplateName(),
+            contentTemplate,
+            channels,
+            request.getTargetUserIds().size() * channels.size(),
+            sentBy,
+            request.getPlaceholderData()
+        );
+        
+        int successCount = 0;
+        int failureCount = 0;
+        
+        for (UUID userId : request.getTargetUserIds()) {
+            try {
+                // Fetch user data from BFF
+                UserPublicDataDto userData = bffClientService.getUserPublicData(userId, bearerToken);
+                
+                // Validate that email exists for email channel
+                if (channels.contains(NotificationChannel.EMAIL) && 
+                    (userData.getEmail() == null || userData.getEmail().isBlank())) {
+                    log.warn("User {} has no email address, skipping email notification", userId);
+                    failureCount += (int) channels.stream()
+                        .filter(ch -> ch == NotificationChannel.EMAIL)
+                        .count();
+                }
+                
+                // Replace placeholders in content
+                String personalizedContent = replacePlaceholders(contentTemplate, request.getPlaceholderData(), userData);
+                
+                for (NotificationChannel channel : channels) {
+                    try {
+                        // Skip email channel if no email address
+                        if (channel == NotificationChannel.EMAIL && 
+                            (userData.getEmail() == null || userData.getEmail().isBlank())) {
+                            continue;
+                        }
+                        createTemplateNotification(userId, userData.getEmail(), channel, template.getTemplateName(), personalizedContent);
+                        successCount++;
+                    } catch (Exception e) {
+                        log.error("Failed to create template notification for user {} channel {}", 
+                            userId, channel, e);
+                        failureCount++;
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to fetch user data for user {}", userId, e);
+                failureCount += channels.size();
+            }
+        }
+        
+        // Update broadcast and template stats
+        updateBroadcastStats(broadcast, successCount, failureCount);
+        incrementTemplateSentTimes(template);
+        
+        return broadcast.getId();
+    }
+    
+    /**
+     * Create a broadcast record.
+     */
+    private BroadcastRecord createBroadcastRecord(UUID templateId, String title, String body,
+                                                  List<NotificationChannel> channels, int recipientCount,
+                                                  UUID sentBy, Map<String, Object> metadata) {
+        BroadcastRecord broadcast = new BroadcastRecord();
+        broadcast.setTemplateId(templateId);
+        broadcast.setTitle(title);
+        broadcast.setBody(body);
+        broadcast.setChannels(channels);
+        broadcast.setRecipientCount(recipientCount);
+        broadcast.setSuccessCount(0);
+        broadcast.setFailureCount(0);
+        broadcast.setSentBy(sentBy);
+        broadcast.setSentAt(Instant.now());
+        broadcast.setMetadata(metadata);
+        
+        broadcast = broadcastRepository.save(broadcast);
+        log.info("Created broadcast record: {} for {} recipients", broadcast.getId(), recipientCount);
+        
+        return broadcast;
+    }
+    
+    /**
+     * Update broadcast statistics.
+     */
+    private void updateBroadcastStats(BroadcastRecord broadcast, int successCount, int failureCount) {
+        broadcast.setSuccessCount(successCount);
+        broadcast.setFailureCount(failureCount);
+        broadcastRepository.save(broadcast);
+        log.debug("Updated broadcast {} stats: success={}, failure={}", 
+            broadcast.getId(), successCount, failureCount);
+    }
+    
+    /**
+     * Increment template sent times.
+     */
+    private void incrementTemplateSentTimes(NotificationTemplate template) {
+        template.setSentTimes(template.getSentTimes() + 1);
+        templateRepository.save(template);
+    }
+    
+    /**
+     * Replace placeholders in template content.
+     * Supports {{placeholder}} syntax.
+     */
+    private String replacePlaceholders(String content, Map<String, Object> placeholders, UserPublicDataDto user) {
+        if (placeholders == null || placeholders.isEmpty()) {
+            return content;
+        }
+        
+        String result = content;
+        Pattern pattern = Pattern.compile("\\{\\{([^}]+)\\}\\}");
+        Matcher matcher = pattern.matcher(content);
+        
+        while (matcher.find()) {
+            String placeholder = matcher.group(1).trim();
+            Object value = placeholders.get(placeholder);
+            if (value != null) {
+                result = result.replace("{{" + placeholder + "}}", value.toString());
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Create a notification from a template.
+     */
+    private void createTemplateNotification(UUID userId, String userEmail, NotificationChannel channel, 
+                                           String title, String body) {
+        Notification notification = new Notification();
+        notification.setUserId(userId);
+        notification.setChannel(channel);
+        notification.setTitle(title);
+        notification.setBody(body);
+        notification.setDeliveryStatus(DeliveryStatus.PENDING);
+        notification.setRead(false);
+        
+        notificationRepository.save(notification);
+        if (channel != NotificationChannel.IN_APP) {
+            enqueueOutbox(notification, userEmail);
+        }
+        
+        // For non IN_APP channels, trigger actual delivery
+        if (channel != NotificationChannel.IN_APP) {
+            deliverNotification(notification, userEmail);
         }
     }
     
@@ -159,7 +414,7 @@ public class NotificationService {
     /**
      * Create a notification for a given event and channel.
      */
-    private void createNotificationForChannel(NotificationEventRequest request, NotificationChannel channel) {
+    private void createNotificationForChannel(NotificationEventRequest request, NotificationChannel channel, UserPublicDataDto userData) {
         Notification notification = new Notification();
         notification.setUserId(request.getPrimaryUserId());
         notification.setChannel(channel);
@@ -177,19 +432,19 @@ public class NotificationService {
         notificationRepository.save(notification);
         if (channel != NotificationChannel.IN_APP) {
             // enqueue to outbox for async delivery
-            enqueueOutbox(notification);
+            enqueueOutbox(notification, userData.getEmail());
         }
         
         // For non IN_APP channels, trigger actual delivery (email, WhatsApp)
         if (channel != NotificationChannel.IN_APP) {
-            deliverNotification(notification);
+            deliverNotification(notification, userData.getEmail());
         }
     }
     
     /**
      * Create a direct ad-hoc notification for a user and channel.
      */
-    private void createDirectNotification(UUID userId, NotificationChannel channel, DirectNotificationSendRequest request) {
+    private void createDirectNotification(UUID userId, String userEmail, NotificationChannel channel, DirectNotificationSendRequest request) {
         Notification notification = new Notification();
         notification.setUserId(userId);
         notification.setChannel(channel);
@@ -202,12 +457,12 @@ public class NotificationService {
         notificationRepository.save(notification);
         if (channel != NotificationChannel.IN_APP) {
             // enqueue to outbox for async delivery
-            enqueueOutbox(notification);
+            enqueueOutbox(notification, userEmail);
         }
         
         // For non IN_APP channels, trigger actual delivery
         if (channel != NotificationChannel.IN_APP) {
-            deliverNotification(notification);
+            deliverNotification(notification, userEmail);
         }
     }
     
@@ -293,7 +548,7 @@ public class NotificationService {
      * Deliver via external providers (stub).
      * TODO: Integrate email/WhatsApp providers; update outbox status.
      */
-    public void deliverNotification(Notification notification) {
+    public void deliverNotification(Notification notification, String recipientEmail) {
         // TODO: Implement actual delivery logic for EMAIL and WHATSAPP
         // This would integrate with email service (e.g., SendGrid, AWS SES)
         // and WhatsApp service (e.g., Twilio, WhatsApp Business API)
@@ -304,7 +559,6 @@ public class NotificationService {
         try {
             switch (notification.getChannel()) {
                 case EMAIL:
-                    String recipientEmail = userServiceClient.getUserEmail(notification.getUserId());
                     emailService.sendEmail(recipientEmail, notification.getTitle(), notification.getBody());
                     break;
                 case WHATSAPP:
@@ -328,10 +582,11 @@ public class NotificationService {
      * Enqueue a delivery record into delivery_outbox for async processing.
      * The worker will pick it up and handle retries.
      */
-    private void enqueueOutbox(Notification notification) {
+    private void enqueueOutbox(Notification notification, String recipientEmail) {
         DeliveryOutbox outbox = new DeliveryOutbox();
         outbox.setNotificationId(notification.getId());
         outbox.setChannel(notification.getChannel());
+        outbox.setRecipientEmail(recipientEmail);
         outbox.setStatus(DeliveryStatus.PENDING);
         outbox.setRetryCount(0);
         outbox.setMaxRetries(3);

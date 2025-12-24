@@ -4,9 +4,9 @@ spring:
 
   # Database Configuration
   datasource:
-    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:dopaminelite_notifications}
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:postgres}
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   # JPA Configuration
@@ -64,6 +64,9 @@ server:
 # Email (SES SMTP) Configuration
 notifications:
   email:
-    sender: ${SMTP_SENDER_EMAIL:sankapeeris360@gmail.com}
+    sender: ${NOTIFICATIONS_EMAIL_SENDER:sankapeeris360@gmail.com}
+    region: ${NOTIFICATIONS_EMAIL_REGION:ap-south-1}
+  bff:
+    base-url: ${BFF_BASE_URL}
 
 # Liquibase uses default changelog path classpath:/db/changelog/db.changelog-master.yaml

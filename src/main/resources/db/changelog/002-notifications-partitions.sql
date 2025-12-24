@@ -1,5 +1,5 @@
 -- liquibase formatted sql
--- changeset copilot:002-01-create-monthly-partitions splitStatements:false endDelimiter:END_PARTITIONS
+-- changeset system:002-01-create-monthly-partitions splitStatements:false endDelimiter:END_PARTITIONS
 
 -- Helper function to create monthly partitions with 8 hash subpartitions by user_id
 DO $BODY$
@@ -47,7 +47,7 @@ BEGIN
 END $BODY$;
 END_PARTITIONS
 
--- changeset copilot:002-02-triggers-updated-at splitStatements:false endDelimiter:END_TRIGGERS
+-- changeset system:002-02-triggers-updated-at splitStatements:false endDelimiter:END_TRIGGERS
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $BODY$
 BEGIN
