@@ -24,7 +24,7 @@ class DirectSendControllerTest {
     @DisplayName("POST /notifications/send accepts direct send")
     void sendDirectNotifications() throws Exception {
         UUID broadcastId = UUID.randomUUID();
-        Mockito.when(notificationService.sendDirectNotifications(Mockito.any(), Mockito.any(), Mockito.any()))
+        Mockito.when(notificationService.sendDirectNotifications(Mockito.any(), Mockito.any()))
             .thenReturn(broadcastId);
 
         String json = "{" +
@@ -35,7 +35,6 @@ class DirectSendControllerTest {
                 "}";
 
         mockMvc.perform(post("/notifications/send")
-                        .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isAccepted())

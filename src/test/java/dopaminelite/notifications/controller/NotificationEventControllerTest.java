@@ -37,7 +37,7 @@ class NotificationEventControllerTest {
                 .payload(Map.of("submissionId", "abc", "oldStatus", "PENDING", "newStatus", "APPROVED"))
                 .build();
 
-        Mockito.doNothing().when(notificationService).processNotificationEvent(Mockito.any(), Mockito.any());
+        Mockito.doNothing().when(notificationService).processNotificationEvent(Mockito.any());
 
         String json = "{" +
                 "\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
@@ -47,7 +47,6 @@ class NotificationEventControllerTest {
                 "}";
 
         mockMvc.perform(post("/notification-events")
-                        .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isAccepted());

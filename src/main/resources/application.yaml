@@ -77,7 +77,9 @@ server:
 # Email (SES SMTP) Configuration
 notifications:
   email:
-    sender: ${NOTIFICATIONS_EMAIL_SENDER}
+    sender: ${NOTIFICATIONS_EMAIL_SENDER:no-reply@sddopaminelite.com}
     region: ${NOTIFICATIONS_EMAIL_REGION:ap-south-1}
   bff:
-    base-url: ${BFF_BASE_URL}
+    base-url: ${BFF_BASE_URL:http://localhost:3000}
+  service:
+    internalToken: ${INTERNAL_SERVICE_TOKEN:change-me-in-production}

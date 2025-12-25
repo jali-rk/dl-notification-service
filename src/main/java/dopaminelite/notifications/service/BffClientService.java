@@ -21,30 +21,32 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class BffClientService {
-    
+
     private final RestClient.Builder restClientBuilder;
-    
+
     @Value("${notifications.bff.base-url}")
     private String bffBaseUrl;
-    
+
+    @Value("${notifications.service.internalToken}")
+    private String serviceToken;
+
     /**
      * Fetch user public data from BFF.
      * Calls GET /users/{userId}/public endpoint.
      *
      * @param userId The user ID to fetch
-     * @param bearerToken The bearer token from the original request for authentication
      * @return UserPublicDataDto containing public user information
      * @throws ResourceNotFoundException if user not found
      */
-    public UserPublicDataDto getUserPublicData(UUID userId, String bearerToken) {
+    public UserPublicDataDto getUserPublicData(UUID userId) {
         try {
             RestClient restClient = restClientBuilder
                 .baseUrl(bffBaseUrl)
                 .build();
-            
+
             BffResponse response = restClient.get()
                 .uri("/users/{userId}/public", userId)
-                .header("Authorization", "Bearer " + bearerToken)
+                .header("X-Service-Token", serviceToken)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, (request, resp) -> {
                     throw new ResourceNotFoundException("User not found: " + userId);
@@ -53,13 +55,13 @@ public class BffClientService {
                     throw new RuntimeException("BFF server error while fetching user: " + userId);
                 })
                 .body(BffResponse.class);
-            
+
             if (response == null || response.getData() == null) {
                 throw new ResourceNotFoundException("User not found: " + userId);
             }
-            
+
             return response.getData();
-            
+
         } catch (ResourceNotFoundException e) {
             throw e;
         } catch (Exception e) {

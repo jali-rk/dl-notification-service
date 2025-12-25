@@ -133,12 +133,12 @@ public class NotificationService {
      * Non-IN_APP channels are queued for delivery via outbox (future work).
      */
     @Transactional
-    public void processNotificationEvent(NotificationEventRequest request, String bearerToken) {
-        log.info("Processing notification event: {} for user: {}", 
+    public void processNotificationEvent(NotificationEventRequest request) {
+        log.info("Processing notification event: {} for user: {}",
             request.getEventType(), request.getPrimaryUserId());
-        
+
         // Fetch user details from BFF
-        UserPublicDataDto userData = bffClientService.getUserPublicData(request.getPrimaryUserId(), bearerToken);
+        UserPublicDataDto userData = bffClientService.getUserPublicData(request.getPrimaryUserId());
         
         List<NotificationChannel> channels = request.getChannels();
         if (channels == null || channels.isEmpty()) {
@@ -170,10 +170,10 @@ public class NotificationService {
      * Creates a broadcast record to track the send operation.
      */
     @Transactional
-    public UUID sendDirectNotifications(DirectNotificationSendRequest request, UUID sentBy, String bearerToken) {
-        log.info("Sending direct notifications to {} users via {} channels", 
+    public UUID sendDirectNotifications(DirectNotificationSendRequest request, UUID sentBy) {
+        log.info("Sending direct notifications to {} users via {} channels",
             request.getTargetUserIds().size(), request.getChannels());
-        
+
         // Create broadcast record
         BroadcastRecord broadcast = createBroadcastRecord(
             null, // no template
@@ -184,14 +184,14 @@ public class NotificationService {
             sentBy,
             request.getMetadata()
         );
-        
+
         int successCount = 0;
         int failureCount = 0;
-        
+
         for (UUID userId : request.getTargetUserIds()) {
             try {
                 // Fetch user data from BFF
-                UserPublicDataDto userData = bffClientService.getUserPublicData(userId, bearerToken);
+                UserPublicDataDto userData = bffClientService.getUserPublicData(userId);
                 
                 // Validate that email exists for email channel
                 if (request.getChannels().contains(NotificationChannel.EMAIL) && 
@@ -233,32 +233,32 @@ public class NotificationService {
      * Supports placeholder replacement for personalized templates.
      */
     @Transactional
-    public UUID sendFromTemplate(SendFromTemplateRequest request, UUID sentBy, String bearerToken) {
+    public UUID sendFromTemplate(SendFromTemplateRequest request, UUID sentBy) {
         // Get template
         NotificationTemplate template = templateRepository.findById(request.getTemplateId())
             .orElseThrow(() -> new ResourceNotFoundException("Template not found: " + request.getTemplateId()));
-        
+
         // Determine channels (use request channels or template defaults)
         List<NotificationChannel> channels = request.getChannels() != null && !request.getChannels().isEmpty()
             ? request.getChannels()
             : template.getChannels();
-        
+
         if (channels == null || channels.isEmpty()) {
             throw new ValidationException("No channels specified for template-based send");
         }
-        
+
         log.info("Sending notifications from template {} to {} users via {} channels",
             template.getTemplateName(), request.getTargetUserIds().size(), channels);
-        
+
         // Use English content as default (can be enhanced to support language selection)
-        String contentTemplate = template.getContentEnglish() != null 
-            ? template.getContentEnglish() 
+        String contentTemplate = template.getContentEnglish() != null
+            ? template.getContentEnglish()
             : template.getContentSinhala();
-        
+
         if (contentTemplate == null || contentTemplate.isBlank()) {
             throw new ValidationException("Template has no content");
         }
-        
+
         // Create broadcast record
         BroadcastRecord broadcast = createBroadcastRecord(
             template.getId(),
@@ -269,14 +269,14 @@ public class NotificationService {
             sentBy,
             request.getPlaceholderData()
         );
-        
+
         int successCount = 0;
         int failureCount = 0;
-        
+
         for (UUID userId : request.getTargetUserIds()) {
             try {
                 // Fetch user data from BFF
-                UserPublicDataDto userData = bffClientService.getUserPublicData(userId, bearerToken);
+                UserPublicDataDto userData = bffClientService.getUserPublicData(userId);
                 
                 // Validate that email exists for email channel
                 if (channels.contains(NotificationChannel.EMAIL) && 
