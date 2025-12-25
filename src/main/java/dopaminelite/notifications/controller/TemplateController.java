@@ -18,14 +18,14 @@ import java.util.UUID;
  * REST controller for notification template management.
  * 
  * Endpoints:
- * - GET /api/v1/templates - List templates with filters
- * - POST /api/v1/templates - Create new template
- * - GET /api/v1/templates/{id} - Get template details
- * - PUT /api/v1/templates/{id} - Update template
- * - DELETE /api/v1/templates/{id} - Delete template
+ * - GET /templates - List templates with filters
+ * - POST /templates - Create new template
+ * - GET /templates/{id} - Get template details
+ * - PUT /templates/{id} - Update template
+ * - DELETE /templates/{id} - Delete template
  */
 @RestController
-@RequestMapping("/api/v1/templates")
+@RequestMapping("/templates")
 @RequiredArgsConstructor
 @Validated
 public class TemplateController {

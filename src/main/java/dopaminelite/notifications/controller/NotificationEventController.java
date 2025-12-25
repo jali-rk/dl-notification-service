@@ -10,7 +10,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/notification-events")
+@RequestMapping("/notification-events")
 @RequiredArgsConstructor
 @Validated
 public class NotificationEventController {

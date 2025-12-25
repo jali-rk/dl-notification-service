@@ -28,7 +28,7 @@ class NotificationControllerTest {
                         .build();
 
     @Test
-    @DisplayName("GET /api/v1/notifications returns list for user")
+        @DisplayName("GET /notifications returns list for user")
     void listNotifications() throws Exception {
         UUID userId = UUID.randomUUID();
         NotificationDto dto = NotificationDto.builder()
@@ -49,7 +49,7 @@ class NotificationControllerTest {
         Mockito.when(notificationService.listNotifications(Mockito.eq(userId), Mockito.eq(false), Mockito.isNull(), Mockito.eq(20), Mockito.eq(0)))
                 .thenReturn(response);
 
-        mockMvc.perform(get("/api/v1/notifications")
+        mockMvc.perform(get("/notifications")
                         .param("userId", userId.toString())
                         .param("unreadOnly", "false")
                         .param("limit", "20")
@@ -61,7 +61,7 @@ class NotificationControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/v1/notifications/{id} returns a notification")
+        @DisplayName("GET /notifications/{id} returns a notification")
     void getNotification() throws Exception {
         UUID id = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
@@ -78,14 +78,14 @@ class NotificationControllerTest {
 
         Mockito.when(notificationService.getNotification(id)).thenReturn(dto);
 
-        mockMvc.perform(get("/api/v1/notifications/" + id))
+        mockMvc.perform(get("/notifications/" + id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(id.toString()))
                 .andExpect(jsonPath("$.userId").value(userId.toString()));
     }
 
     @Test
-    @DisplayName("PATCH /api/v1/notifications/{id}/read marks as read")
+        @DisplayName("PATCH /notifications/{id}/read marks as read")
     void markAsRead() throws Exception {
         UUID id = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
@@ -104,7 +104,7 @@ class NotificationControllerTest {
 
         Mockito.when(notificationService.markAsRead(id, req)).thenReturn(dto);
 
-        mockMvc.perform(patch("/api/v1/notifications/" + id + "/read")
+        mockMvc.perform(patch("/notifications/" + id + "/read")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"isRead\": true}"))
                 .andExpect(status().isOk())

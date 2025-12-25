@@ -26,7 +26,7 @@ class NotificationEventControllerTest {
                         .build();
 
     @Test
-    @DisplayName("POST /api/v1/notification-events accepts event")
+        @DisplayName("POST /notification-events accepts event")
     void processNotificationEvent() throws Exception {
         UUID userId = UUID.randomUUID();
         
@@ -46,7 +46,7 @@ class NotificationEventControllerTest {
                 "\"payload\":{\"submissionId\":\"abc\",\"oldStatus\":\"PENDING\",\"newStatus\":\"APPROVED\"}" +
                 "}";
 
-        mockMvc.perform(post("/api/v1/notification-events")
+        mockMvc.perform(post("/notification-events")
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))

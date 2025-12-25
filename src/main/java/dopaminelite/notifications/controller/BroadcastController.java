@@ -18,11 +18,11 @@ import java.util.UUID;
  * REST controller for broadcast notification history.
  * 
  * Endpoints:
- * - GET /api/v1/broadcasts - List broadcast history with filters
- * - GET /api/v1/broadcasts/{id} - Get broadcast details
+ * - GET /broadcasts - List broadcast history with filters
+ * - GET /broadcasts/{id} - Get broadcast details
  */
 @RestController
-@RequestMapping("/api/v1/broadcasts")
+@RequestMapping("/broadcasts")
 @RequiredArgsConstructor
 @Validated
 public class BroadcastController {
