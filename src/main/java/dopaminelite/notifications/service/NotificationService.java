@@ -402,11 +402,6 @@ public class NotificationService {
         if (channel != NotificationChannel.IN_APP) {
             enqueueOutbox(notification, userEmail);
         }
-        
-        // For non IN_APP channels, trigger actual delivery
-        if (channel != NotificationChannel.IN_APP) {
-            deliverNotification(notification, userEmail);
-        }
     }
     
     // Helper methods
@@ -434,11 +429,6 @@ public class NotificationService {
             // enqueue to outbox for async delivery
             enqueueOutbox(notification, userData.getEmail());
         }
-        
-        // For non IN_APP channels, trigger actual delivery (email, WhatsApp)
-        if (channel != NotificationChannel.IN_APP) {
-            deliverNotification(notification, userData.getEmail());
-        }
     }
     
     /**
@@ -458,11 +448,6 @@ public class NotificationService {
         if (channel != NotificationChannel.IN_APP) {
             // enqueue to outbox for async delivery
             enqueueOutbox(notification, userEmail);
-        }
-        
-        // For non IN_APP channels, trigger actual delivery
-        if (channel != NotificationChannel.IN_APP) {
-            deliverNotification(notification, userEmail);
         }
     }
     
