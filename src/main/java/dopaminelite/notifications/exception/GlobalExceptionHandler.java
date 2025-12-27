@@ -4,6 +4,8 @@ import dopaminelite.notifications.dto.common.ErrorObject;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -12,6 +14,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -105,6 +108,42 @@ public class GlobalExceptionHandler {
             .build();
         
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+    
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorObject> handleDataIntegrityViolationException(DataIntegrityViolationException ex) {
+        log.error("Data integrity violation occurred", ex);
+        
+        ErrorObject error = ErrorObject.builder()
+            .code(String.valueOf(HttpStatus.BAD_REQUEST.value()))
+            .message("Invalid data provided. Please check your request and try again.")
+            .build();
+        
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+    
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<ErrorObject> handleDataAccessException(DataAccessException ex) {
+        log.error("Database access error occurred", ex);
+        
+        ErrorObject error = ErrorObject.builder()
+            .code(String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR.value()))
+            .message("A database error occurred. Please try again later.")
+            .build();
+        
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    }
+    
+    @ExceptionHandler(SQLException.class)
+    public ResponseEntity<ErrorObject> handleSQLException(SQLException ex) {
+        log.error("SQL exception occurred", ex);
+        
+        ErrorObject error = ErrorObject.builder()
+            .code(String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR.value()))
+            .message("A database error occurred. Please try again later.")
+            .build();
+        
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
     
     @ExceptionHandler(Exception.class)

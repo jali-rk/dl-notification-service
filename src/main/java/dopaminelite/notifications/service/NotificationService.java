@@ -229,6 +229,62 @@ public class NotificationService {
     }
     
     /**
+     * Send direct notifications by email addresses.
+     * Note: IN_APP notifications are not supported when sending by email only,
+     * as we don't have user IDs. EMAIL channel is the primary use case.
+     */
+    @Transactional
+    public UUID sendDirectNotificationsByEmail(DirectNotificationSendByEmailRequest request, UUID sentBy) {
+        log.info("Sending direct notifications to {} email addresses via {} channels",
+            request.getTargetEmails().size(), request.getChannels());
+
+        // Validate channels - only EMAIL is truly supported for email-only sends
+        if (request.getChannels().contains(NotificationChannel.IN_APP) || 
+            request.getChannels().contains(NotificationChannel.WHATSAPP)) {
+            throw new ValidationException("Only EMAIL channel is supported when sending by email addresses. " +
+                "For IN_APP or WHATSAPP channels, use the /send endpoint with user IDs.");
+        }
+
+        // Create broadcast record
+        BroadcastRecord broadcast = createBroadcastRecord(
+            null, // no template
+            request.getTitle(),
+            request.getBody(),
+            request.getChannels(),
+            request.getTargetEmails().size() * request.getChannels().size(),
+            sentBy,
+            request.getMetadata()
+        );
+
+        int successCount = 0;
+        int failureCount = 0;
+
+        for (String email : request.getTargetEmails()) {
+            try {
+                for (NotificationChannel channel : request.getChannels()) {
+                    try {
+                        if (channel == NotificationChannel.EMAIL) {
+                            createDirectNotificationByEmail(email, request);
+                            successCount++;
+                        }
+                    } catch (Exception e) {
+                        log.error("Failed to create notification for email {} channel {}", email, channel, e);
+                        failureCount++;
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to process email {}", email, e);
+                failureCount += request.getChannels().size();
+            }
+        }
+        
+        // Update broadcast stats
+        updateBroadcastStats(broadcast, successCount, failureCount);
+        
+        return broadcast.getId();
+    }
+    
+    /**
      * Send notifications using a template.
      * Supports placeholder replacement for personalized templates.
      */
@@ -448,6 +504,23 @@ public class NotificationService {
         if (channel != NotificationChannel.IN_APP) {
             // enqueue to outbox for async delivery
             enqueueOutbox(notification, userEmail);
+        }
+    }
+    
+    /**
+     * Create a direct notification by email address only.
+     * Since we don't have a user ID, we skip saving to notifications table
+     * and directly send via email service (no outbox, immediate delivery).
+     */
+    private void createDirectNotificationByEmail(String email, DirectNotificationSendByEmailRequest request) {
+        // Skip saving to notifications table since user_id is required
+        // Directly send email without outbox processing
+        try {
+            emailService.sendEmail(email, request.getTitle(), request.getBody());
+            log.info("Sent email directly to {}", email);
+        } catch (Exception e) {
+            log.error("Failed to send email to {}", email, e);
+            throw e;
         }
     }
     
