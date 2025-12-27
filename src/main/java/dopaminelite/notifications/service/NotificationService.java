@@ -424,7 +424,7 @@ public class NotificationService {
      * Dynamic fields from user object:
      * - {{name}} -> user.fullName
      * - {{email}} -> user.email
-     * - {{registration}} -> user.createdAt (formatted as yyyy-MM-dd)
+     * - {{registration}} -> user.codeNumber
      * - {{date}} -> today's date (formatted as dd)
      * - {{month}} -> current month name
      */
@@ -449,12 +449,9 @@ public class NotificationService {
                 combinedPlaceholders.putIfAbsent("email", user.getEmail());
             }
             
-            // Registration date - use createdAt field
-            if (user.getCreatedAt() != null) {
-                java.time.LocalDate registrationDate = user.getCreatedAt()
-                    .atZone(java.time.ZoneId.systemDefault())
-                    .toLocalDate();
-                combinedPlaceholders.putIfAbsent("registration", registrationDate.toString());
+            // Registration code - use codeNumber field
+            if (user.getCodeNumber() != null) {
+                combinedPlaceholders.putIfAbsent("registration", user.getCodeNumber());
             }
         }
         
