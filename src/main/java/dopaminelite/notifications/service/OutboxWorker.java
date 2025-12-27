@@ -97,7 +97,14 @@ public class OutboxWorker {
     private void deliverNotification(Notification notification, NotificationChannel channel, String recipientEmail) {
         switch (channel) {
             case EMAIL:
-                emailService.sendEmail(recipientEmail, notification.getTitle(), notification.getBody());
+                // Detect basic HTML content; fall back to plain text
+                String body = notification.getBody();
+                boolean isHtml = body != null && body.matches("(?i).*<[a-z].*>.*");
+                if (isHtml) {
+                    emailService.sendHtmlEmail(recipientEmail, notification.getTitle(), body);
+                } else {
+                    emailService.sendEmail(recipientEmail, notification.getTitle(), body);
+                }
                 break;
             case WHATSAPP:
                 // TODO: Integrate WhatsApp provider

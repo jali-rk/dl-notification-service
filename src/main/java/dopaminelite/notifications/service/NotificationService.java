@@ -419,20 +419,60 @@ public class NotificationService {
     
     /**
      * Replace placeholders in template content.
-     * Supports {{placeholder}} syntax.
+     * Supports {{placeholder}} syntax and automatically fetches dynamic user fields.
+     * 
+     * Dynamic fields from user object:
+     * - {{name}} -> user.fullName
+     * - {{email}} -> user.email
+     * - {{registration}} -> user.createdAt (formatted as yyyy-MM-dd)
+     * - {{date}} -> today's date (formatted as dd)
+     * - {{month}} -> current month name
      */
     private String replacePlaceholders(String content, Map<String, Object> placeholders, UserPublicDataDto user) {
-        if (placeholders == null || placeholders.isEmpty()) {
-            return content;
+        // Build combined placeholders map with user data
+        Map<String, Object> combinedPlaceholders = new java.util.HashMap<>();
+        
+        // Add provided placeholders
+        if (placeholders != null && !placeholders.isEmpty()) {
+            combinedPlaceholders.putAll(placeholders);
         }
         
+        // Extract dynamic user fields
+        if (user != null) {
+            // User name - use fullName field
+            if (user.getFullName() != null) {
+                combinedPlaceholders.putIfAbsent("name", user.getFullName());
+            }
+            
+            // User email
+            if (user.getEmail() != null) {
+                combinedPlaceholders.putIfAbsent("email", user.getEmail());
+            }
+            
+            // Registration date - use createdAt field
+            if (user.getCreatedAt() != null) {
+                java.time.LocalDate registrationDate = user.getCreatedAt()
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDate();
+                combinedPlaceholders.putIfAbsent("registration", registrationDate.toString());
+            }
+        }
+        
+        // Current date and month
+        java.time.LocalDate today = java.time.LocalDate.now();
+        combinedPlaceholders.putIfAbsent("date", String.valueOf(today.getDayOfMonth()));
+        
+        java.time.Month currentMonth = today.getMonth();
+        combinedPlaceholders.putIfAbsent("month", currentMonth.toString());
+        
+        // Replace all placeholders
         String result = content;
         Pattern pattern = Pattern.compile("\\{\\{([^}]+)\\}\\}");
         Matcher matcher = pattern.matcher(content);
         
         while (matcher.find()) {
             String placeholder = matcher.group(1).trim();
-            Object value = placeholders.get(placeholder);
+            Object value = combinedPlaceholders.get(placeholder);
             if (value != null) {
                 result = result.replace("{{" + placeholder + "}}", value.toString());
             }
@@ -443,6 +483,7 @@ public class NotificationService {
     
     /**
      * Create a notification from a template.
+     * If body contains HTML tags, sends as HTML email.
      */
     private void createTemplateNotification(UUID userId, String userEmail, NotificationChannel channel, 
                                            String title, String body) {
@@ -511,12 +552,20 @@ public class NotificationService {
      * Create a direct notification by email address only.
      * Since we don't have a user ID, we skip saving to notifications table
      * and directly send via email service (no outbox, immediate delivery).
+     * Automatically detects HTML content and sends as rich text when appropriate.
      */
     private void createDirectNotificationByEmail(String email, DirectNotificationSendByEmailRequest request) {
         // Skip saving to notifications table since user_id is required
         // Directly send email without outbox processing
         try {
-            emailService.sendEmail(email, request.getTitle(), request.getBody());
+            // Detect if body contains HTML tags
+            boolean isHtml = request.getBody() != null && request.getBody().matches("(?i).*<[a-z].*>.*");
+            
+            if (isHtml) {
+                emailService.sendHtmlEmail(email, request.getTitle(), request.getBody());
+            } else {
+                emailService.sendEmail(email, request.getTitle(), request.getBody());
+            }
             log.info("Sent email directly to {}", email);
         } catch (Exception e) {
             log.error("Failed to send email to {}", email, e);
@@ -604,6 +653,7 @@ public class NotificationService {
     
     /**
      * Deliver via external providers (stub).
+     * Automatically detects HTML content and sends as rich text when appropriate.
      * TODO: Integrate email/WhatsApp providers; update outbox status.
      */
     public void deliverNotification(Notification notification, String recipientEmail) {
@@ -617,7 +667,15 @@ public class NotificationService {
         try {
             switch (notification.getChannel()) {
                 case EMAIL:
-                    emailService.sendEmail(recipientEmail, notification.getTitle(), notification.getBody());
+                    // Detect if body contains HTML tags
+                    boolean isHtml = notification.getBody() != null && 
+                        notification.getBody().matches("(?i).*<[a-z].*>.*");
+                    
+                    if (isHtml) {
+                        emailService.sendHtmlEmail(recipientEmail, notification.getTitle(), notification.getBody());
+                    } else {
+                        emailService.sendEmail(recipientEmail, notification.getTitle(), notification.getBody());
+                    }
                     break;
                 case WHATSAPP:
                     // TODO: Integrate WhatsApp provider

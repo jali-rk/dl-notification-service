@@ -1,5 +1,7 @@
 package dopaminelite.notifications.service;
 
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -120,5 +122,100 @@ class EmailServiceTest {
 
         assertEquals(longSubject, captor.getValue().getSubject());
         assertEquals(largeBody, captor.getValue().getText());
+    }
+
+    // HTML Email Tests
+
+    @Test
+    @DisplayName("sendHtmlEmail sends message with HTML content type")
+    void sendHtmlEmail_sendsWithHtmlContentType() throws MessagingException {
+        MimeMessage mockMimeMessage = mock(MimeMessage.class);
+        when(mockMailSender.createMimeMessage()).thenReturn(mockMimeMessage);
+
+        String htmlBody = "<p><strong>Test</strong></p>";
+        emailService.sendHtmlEmail("user@example.com", "Subject", htmlBody);
+
+        verify(mockMailSender).createMimeMessage();
+        verify(mockMailSender).send(mockMimeMessage);
+    }
+
+    @Test
+    @DisplayName("sendHtmlEmail with rich formatting sends successfully")
+    void sendHtmlEmail_withRichFormatting_sendsSuccessfully() throws MessagingException {
+        MimeMessage mockMimeMessage = mock(MimeMessage.class);
+        when(mockMailSender.createMimeMessage()).thenReturn(mockMimeMessage);
+
+        String richHtml = "<p><strong>Test</strong></p>" +
+                "<p>Name: John Doe</p>" +
+                "<ul><li><p>Bullet 1</p></li><li><p>Bullet 2</p></li></ul>" +
+                "<p><em>Italic</em></p>";
+
+        emailService.sendHtmlEmail("user@example.com", "Rich HTML Email", richHtml);
+
+        verify(mockMailSender).createMimeMessage();
+        verify(mockMailSender).send(mockMimeMessage);
+    }
+
+    @Test
+    @DisplayName("sendHtmlEmail with dynamic placeholders sends successfully")
+    void sendHtmlEmail_withDynamicPlaceholders_sendsSuccessfully() throws MessagingException {
+        MimeMessage mockMimeMessage = mock(MimeMessage.class);
+        when(mockMailSender.createMimeMessage()).thenReturn(mockMimeMessage);
+
+        String htmlWithPlaceholders = "<p><strong>Test</strong></p>" +
+                "<p>{{name}} {{email}}</p>" +
+                "<p>Registered: {{registration}}</p>" +
+                "<p>Today: {{date}}/{{month}}</p>";
+
+        emailService.sendHtmlEmail("user@example.com", "Dynamic Content", htmlWithPlaceholders);
+
+        verify(mockMailSender).createMimeMessage();
+        verify(mockMailSender).send(mockMimeMessage);
+    }
+
+    @Test
+    @DisplayName("sendHtmlEmailBatch sends to multiple recipients")
+    void sendHtmlEmailBatch_sendsToMultipleRecipients() throws MessagingException {
+        MimeMessage mockMimeMessage = mock(MimeMessage.class);
+        when(mockMailSender.createMimeMessage()).thenReturn(mockMimeMessage);
+
+        List<String> recipients = Arrays.asList("user1@example.com", "user2@example.com");
+        String htmlBody = "<p><strong>Hello</strong></p>";
+
+        emailService.sendHtmlEmailBatch(recipients, "Subject", htmlBody);
+
+        verify(mockMailSender).createMimeMessage();
+        verify(mockMailSender).send(mockMimeMessage);
+    }
+
+    @Test
+    @DisplayName("sendHtmlEmail with MessagingException throws RuntimeException")
+    void sendHtmlEmail_withMessagingException_throwsRuntimeException() throws MessagingException {
+        MimeMessage mockMimeMessage = mock(MimeMessage.class);
+        when(mockMailSender.createMimeMessage()).thenReturn(mockMimeMessage);
+        doThrow(new RuntimeException("Send failed")).when(mockMailSender).send(mockMimeMessage);
+
+        String htmlBody = "<p>Test</p>";
+
+        assertThrows(RuntimeException.class, () ->
+                emailService.sendHtmlEmail("user@example.com", "Subject", htmlBody)
+        );
+
+        verify(mockMailSender).createMimeMessage();
+        verify(mockMailSender).send(mockMimeMessage);
+    }
+
+    @Test
+    @DisplayName("sendHtmlEmail with special characters in HTML sends successfully")
+    void sendHtmlEmail_withSpecialCharactersInHtml_sendsSuccessfully() throws MessagingException {
+        MimeMessage mockMimeMessage = mock(MimeMessage.class);
+        when(mockMailSender.createMimeMessage()).thenReturn(mockMimeMessage);
+
+        String htmlWithSpecialChars = "<p>Test 🎉 with émojis 😊 and ñ symbols</p>";
+
+        emailService.sendHtmlEmail("user@example.com", "Special Chars", htmlWithSpecialChars);
+
+        verify(mockMailSender).createMimeMessage();
+        verify(mockMailSender).send(mockMimeMessage);
     }
 }
