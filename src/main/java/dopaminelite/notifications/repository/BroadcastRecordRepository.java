@@ -31,8 +31,7 @@ public interface BroadcastRecordRepository extends JpaRepository<BroadcastRecord
      * Search broadcasts by title or body content.
      */
     @Query("SELECT b FROM BroadcastRecord b WHERE " +
-           "LOWER(b.title) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "LOWER(b.body) LIKE LOWER(CONCAT('%', :search, '%'))")
+           "LOWER(b.title) LIKE LOWER(CONCAT('%', :search, '%'))")
     Page<BroadcastRecord> search(@Param("search") String search, Pageable pageable);
     
     /**
@@ -42,9 +41,7 @@ public interface BroadcastRecordRepository extends JpaRepository<BroadcastRecord
            "(:sentBy IS NULL OR b.sentBy = :sentBy) AND " +
            "(:dateFrom IS NULL OR b.sentAt >= :dateFrom) AND " +
            "(:dateTo IS NULL OR b.sentAt <= :dateTo) AND " +
-           "(:search IS NULL OR " +
-           "LOWER(b.title) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "LOWER(b.body) LIKE LOWER(CONCAT('%', :search, '%')))")
+           "(:search IS NULL OR LOWER(b.title) LIKE LOWER(CONCAT('%', :search, '%')))")
     Page<BroadcastRecord> findByFilters(@Param("sentBy") UUID sentBy,
                                         @Param("dateFrom") Instant dateFrom,
                                         @Param("dateTo") Instant dateTo,
