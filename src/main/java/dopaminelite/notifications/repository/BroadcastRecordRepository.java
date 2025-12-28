@@ -36,12 +36,20 @@ public interface BroadcastRecordRepository extends JpaRepository<BroadcastRecord
     
     /**
      * Complex search with multiple filters.
+     * Uses native SQL to avoid Hibernate 6 UUID mapping issues with PostgreSQL.
      */
-    @Query("SELECT b FROM BroadcastRecord b WHERE " +
-           "(:sentBy IS NULL OR b.sentBy = :sentBy) AND " +
-           "(:dateFrom IS NULL OR b.sentAt >= :dateFrom) AND " +
-           "(:dateTo IS NULL OR b.sentAt <= :dateTo) AND " +
-           "(:search IS NULL OR LOWER(b.title) LIKE LOWER(CONCAT('%', :search, '%')))")
+    @Query(value = "SELECT b.* " +
+           "FROM broadcast_records b WHERE " +
+           "(CAST(:sentBy AS uuid) IS NULL OR b.sent_by = CAST(:sentBy AS uuid)) AND " +
+           "(CAST(:dateFrom AS timestamp) IS NULL OR b.sent_at >= CAST(:dateFrom AS timestamp)) AND " +
+           "(CAST(:dateTo AS timestamp) IS NULL OR b.sent_at <= CAST(:dateTo AS timestamp)) AND " +
+           "(:search IS NULL OR LOWER(b.title) LIKE LOWER(CONCAT('%', :search, '%')))",
+           countQuery = "SELECT COUNT(*) FROM broadcast_records b WHERE " +
+           "(CAST(:sentBy AS uuid) IS NULL OR b.sent_by = CAST(:sentBy AS uuid)) AND " +
+           "(CAST(:dateFrom AS timestamp) IS NULL OR b.sent_at >= CAST(:dateFrom AS timestamp)) AND " +
+           "(CAST(:dateTo AS timestamp) IS NULL OR b.sent_at <= CAST(:dateTo AS timestamp)) AND " +
+           "(:search IS NULL OR LOWER(b.title) LIKE LOWER(CONCAT('%', :search, '%')))",
+           nativeQuery = true)
     Page<BroadcastRecord> findByFilters(@Param("sentBy") UUID sentBy,
                                         @Param("dateFrom") Instant dateFrom,
                                         @Param("dateTo") Instant dateTo,

@@ -35,12 +35,13 @@ public class BroadcastService {
      * List broadcasts with optional filters and pagination.
      */
     @Transactional(readOnly = true)
-    public BroadcastListResponse listBroadcasts(UUID sentBy, Instant dateFrom, Instant dateTo, 
+    public BroadcastListResponse listBroadcasts(UUID sentBy, Instant dateFrom, Instant dateTo,
                                                 String search, int limit, int offset) {
-        Pageable pageable = PageRequest.of(offset / limit, limit, Sort.by(Sort.Direction.DESC, "sentAt"));
-        
+        // Use database column name for native query sorting
+        Pageable pageable = PageRequest.of(offset / limit, limit, Sort.by(Sort.Direction.DESC, "sent_at"));
+
         Page<BroadcastRecord> page = broadcastRepository.findByFilters(sentBy, dateFrom, dateTo, search, pageable);
-        
+
         return BroadcastListResponse.builder()
             .items(page.getContent().stream().map(this::toDto).toList())
             .total(page.getTotalElements())
