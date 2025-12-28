@@ -209,7 +209,7 @@ public class NotificationService {
                             (userData.getEmail() == null || userData.getEmail().isBlank())) {
                             continue;
                         }
-                        createDirectNotification(userId, userData.getEmail(), channel, request);
+                        createDirectNotification(userId, userData.getEmail(), channel, request, userData);
                         successCount++;
                     } catch (Exception e) {
                         log.error("Failed to create notification for user {} channel {}", userId, channel, e);
@@ -510,8 +510,15 @@ public class NotificationService {
         
         // Generate title and body based on event type
         String[] content = generateContentForEvent(request);
-        notification.setTitle(content[0]);
-        notification.setBody(content[1]);
+        String title = content[0];
+        String body = content[1];
+        
+        // Replace placeholders in title and body with actual user data
+        title = replacePlaceholders(title, request.getPayload(), userData);
+        body = replacePlaceholders(body, request.getPayload(), userData);
+        
+        notification.setTitle(title);
+        notification.setBody(body);
         
         notification.setTemplateKey(request.getEventType().name());
         notification.setMetadata(request.getPayload());
@@ -528,12 +535,18 @@ public class NotificationService {
     /**
      * Create a direct ad-hoc notification for a user and channel.
      */
-    private void createDirectNotification(UUID userId, String userEmail, NotificationChannel channel, DirectNotificationSendRequest request) {
+    private void createDirectNotification(UUID userId, String userEmail, NotificationChannel channel, 
+                                         DirectNotificationSendRequest request, UserPublicDataDto userData) {
         Notification notification = new Notification();
         notification.setUserId(userId);
         notification.setChannel(channel);
-        notification.setTitle(request.getTitle());
-        notification.setBody(request.getBody());
+        
+        // Replace placeholders in title and body with actual user data
+        String title = replacePlaceholders(request.getTitle(), request.getMetadata(), userData);
+        String body = replacePlaceholders(request.getBody(), request.getMetadata(), userData);
+        
+        notification.setTitle(title);
+        notification.setBody(body);
         notification.setMetadata(request.getMetadata());
         notification.setDeliveryStatus(DeliveryStatus.PENDING);
         notification.setRead(false);
@@ -572,7 +585,8 @@ public class NotificationService {
     
     /**
      * Generate title/body content for an event.
-     * In production, replace with proper templating.
+     * Templates can include placeholders like {{name}}, {{email}}, {{registration}} for user data,
+     * and custom placeholders from the payload will be replaced.
      */
     private String[] generateContentForEvent(NotificationEventRequest request) {
         // This is a simplified version. In production, use proper templating engine
@@ -581,51 +595,38 @@ public class NotificationService {
         
         switch (request.getEventType()) {
             case PAYMENT_STATUS_CHANGED:
-                String newStatus = request.getPayload() != null 
-                    ? String.valueOf(request.getPayload().get("newStatus")) 
-                    : "updated";
                 title = "Payment Status Updated";
-                body = String.format("Your payment status has been changed to %s.", newStatus);
+                body = "Hi {{name}}, your payment status has been changed to {{newStatus}}.";
                 break;
                 
             case ISSUE_STATUS_CHANGED:
-                String issueStatus = request.getPayload() != null 
-                    ? String.valueOf(request.getPayload().get("newStatus")) 
-                    : "updated";
                 title = "Issue Status Updated";
-                body = String.format("Your issue status has been changed to %s.", issueStatus);
+                body = "Hi {{name}}, your issue status has been changed to {{newStatus}}.";
                 break;
                 
             case ISSUE_MESSAGE_NEW:
-                String preview = request.getPayload() != null 
-                    ? String.valueOf(request.getPayload().getOrDefault("messagePreview", "...")) 
-                    : "...";
                 title = "New Message";
-                body = String.format("You have a new message: %s", preview);
+                body = "Hi {{name}}, you have a new message: {{messagePreview}}";
                 break;
                 
             case STUDENT_VERIFIED:
                 title = "Account Verified";
-                body = "Welcome to DopamineLite! Your account has been verified.";
+                body = "Welcome to DopamineLite, {{name}}! Your account has been verified.";
                 break;
                 
             case STUDENT_REGISTERED:
                 title = "Registration Successful";
-                body = "Thank you for registering with DopamineLite.";
+                body = "Thank you for registering with DopamineLite, {{name}}. Your registration number is {{registration}}.";
                 break;
                 
             case ADMIN_BROADCAST:
-                title = request.getPayload() != null 
-                    ? String.valueOf(request.getPayload().getOrDefault("title", "Announcement")) 
-                    : "Announcement";
-                body = request.getPayload() != null 
-                    ? String.valueOf(request.getPayload().getOrDefault("message", "")) 
-                    : "";
+                title = "{{title}}";
+                body = "{{message}}";
                 break;
                 
             default:
                 title = "Notification";
-                body = "You have a new notification.";
+                body = "Hi {{name}}, you have a new notification.";
         }
         
         return new String[]{title, body};
