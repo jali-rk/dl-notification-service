@@ -68,4 +68,36 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
      * Count unread notifications by user and channel.
      */
     long countByUserIdAndIsReadAndChannel(UUID userId, boolean isRead, NotificationChannel channel);
+
+    // Admin endpoints - list all notifications without user filter
+
+    /**
+     * Find all notifications with pagination (admin).
+     */
+    Page<Notification> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    /**
+     * Find all notifications by channel with pagination (admin).
+     */
+    Page<Notification> findAllByChannelOrderByCreatedAtDesc(
+        NotificationChannel channel,
+        Pageable pageable
+    );
+
+    /**
+     * Find all unread notifications with pagination (admin).
+     */
+    Page<Notification> findAllByIsReadOrderByCreatedAtDesc(
+        boolean isRead,
+        Pageable pageable
+    );
+
+    /**
+     * Find all unread notifications by channel with pagination (admin).
+     */
+    Page<Notification> findAllByIsReadAndChannelOrderByCreatedAtDesc(
+        boolean isRead,
+        NotificationChannel channel,
+        Pageable pageable
+    );
 }

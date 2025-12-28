@@ -64,9 +64,9 @@ public class NotificationService {
         Pageable pageable = PageRequest.of(offset / limit, limit);
         Page<Notification> page;
         long total;
-        
+
         boolean isUnread = unreadOnly != null && unreadOnly;
-        
+
         if (channel != null && isUnread) {
             page = notificationRepository.findByUserIdAndIsReadAndChannelOrderByCreatedAtDesc(
                 userId, false, channel, pageable
@@ -86,14 +86,57 @@ public class NotificationService {
             page = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
             total = notificationRepository.countByUserId(userId);
         }
-        
+
         List<NotificationDto> items = page.getContent().stream()
             .map(this::toDto)
             .toList();
-        
+
         return NotificationListResponse.builder()
             .items(items)
             .total(total)
+            .build();
+    }
+
+    /**
+     * List all notifications for admin with optional filters.
+     * Similar to listNotifications but without userId filter.
+     * Parameters: unreadOnly, channel, limit, offset.
+     */
+    @Transactional(readOnly = true)
+    public NotificationListResponse listAllNotifications(
+        Boolean unreadOnly,
+        NotificationChannel channel,
+        int limit,
+        int offset
+    ) {
+        Pageable pageable = PageRequest.of(offset / limit, limit);
+        Page<Notification> page;
+
+        boolean isUnread = unreadOnly != null && unreadOnly;
+
+        if (channel != null && isUnread) {
+            page = notificationRepository.findAllByIsReadAndChannelOrderByCreatedAtDesc(
+                false, channel, pageable
+            );
+        } else if (channel != null) {
+            page = notificationRepository.findAllByChannelOrderByCreatedAtDesc(
+                channel, pageable
+            );
+        } else if (isUnread) {
+            page = notificationRepository.findAllByIsReadOrderByCreatedAtDesc(
+                false, pageable
+            );
+        } else {
+            page = notificationRepository.findAllByOrderByCreatedAtDesc(pageable);
+        }
+
+        List<NotificationDto> items = page.getContent().stream()
+            .map(this::toDto)
+            .toList();
+
+        return NotificationListResponse.builder()
+            .items(items)
+            .total(page.getTotalElements())
             .build();
     }
     
