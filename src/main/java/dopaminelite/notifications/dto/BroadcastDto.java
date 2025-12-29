@@ -32,4 +32,5 @@ public class BroadcastDto {
     private UUID sentBy;
     private Instant sentAt;
     private Map<String, Object> metadata;
+    private List<UUID> notificationIds;
 }

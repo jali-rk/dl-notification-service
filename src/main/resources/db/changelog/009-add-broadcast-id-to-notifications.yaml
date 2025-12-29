@@ -1,0 +1,15 @@
+databaseChangeLog:
+  - changeSet:
+      id: 009-01-add-broadcast-id-column
+      author: system
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE notifications ADD COLUMN IF NOT EXISTS broadcast_id UUID NULL;
+  - changeSet:
+      id: 009-02-create-broadcast-id-index
+      author: system
+      changes:
+        - sql:
+            sql: |
+              CREATE INDEX IF NOT EXISTS idx_notifications_broadcast_id ON notifications (broadcast_id);
