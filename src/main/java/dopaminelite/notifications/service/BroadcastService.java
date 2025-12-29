@@ -84,7 +84,7 @@ public class BroadcastService {
         broadcast = broadcastRepository.save(broadcast);
         log.info("Created broadcast record: {} for {} recipients", broadcast.getId(), recipientCount);
         
-        return toDto(broadcast);
+        return toDtoWithoutNotifications(broadcast);
     }
     
     /**
