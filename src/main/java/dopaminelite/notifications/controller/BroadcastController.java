@@ -2,10 +2,7 @@ package dopaminelite.notifications.controller;
 
 import dopaminelite.notifications.dto.BroadcastDto;
 import dopaminelite.notifications.dto.BroadcastListResponse;
-import dopaminelite.notifications.dto.NotificationListResponse;
-import dopaminelite.notifications.entity.enums.NotificationChannel;
 import dopaminelite.notifications.service.BroadcastService;
-import dopaminelite.notifications.service.NotificationService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +18,7 @@ import java.util.UUID;
  * REST controller for broadcast notification history.
  *
  * Endpoints:
- * - GET /broadcasts - List all notifications (admin view)
+ * - GET /broadcasts - List broadcast records with filters
  * - GET /broadcasts/{id} - Get broadcast details
  */
 @RestController
@@ -31,15 +28,9 @@ import java.util.UUID;
 public class BroadcastController {
 
     private final BroadcastService broadcastService;
-    private final NotificationService notificationService;
     
-    /**
-     * List all notifications (admin view).
-     *
-     * Modified to return notifications instead of broadcast records.
-     * OpenAPI: GET /broadcasts
-     * Accepts original broadcast filters for compatibility but returns notifications.
-     */
+    // COMMENTED OUT: Endpoint that returns all notifications instead of broadcast records
+    /*
     @GetMapping
     public ResponseEntity<NotificationListResponse> listBroadcasts(
         @RequestParam(required = false) UUID sentBy,
@@ -59,9 +50,14 @@ public class BroadcastController {
         );
         return ResponseEntity.ok(response);
     }
+    */
 
-    // COMMENTED OUT: Original broadcast records logic
-    /*
+    /**
+     * List broadcast records with filters.
+     *
+     * OpenAPI: GET /broadcasts
+     * Returns broadcast records with success/fail counts, sent time, template title/body, and related notification IDs.
+     */
     @GetMapping
     public ResponseEntity<BroadcastListResponse> listBroadcasts(
         @RequestParam(required = false) UUID sentBy,
@@ -76,7 +72,6 @@ public class BroadcastController {
         );
         return ResponseEntity.ok(response);
     }
-    */
     
     /**
      * Get broadcast details.

@@ -21,7 +21,8 @@ import java.util.UUID;
 @Table(name = "notifications", indexes = {
     @Index(name = "idx_user_channel", columnList = "user_id,channel"),
     @Index(name = "idx_user_is_read", columnList = "user_id,is_read"),
-    @Index(name = "idx_created_at", columnList = "created_at")
+    @Index(name = "idx_created_at", columnList = "created_at"),
+    @Index(name = "idx_broadcast_id", columnList = "broadcast_id")
 })
 @Getter
 @Setter
@@ -29,6 +30,9 @@ public class Notification extends AuditableEntity {
     
     @Column(name = "user_id", nullable = false)
     private UUID userId;
+    
+    @Column(name = "broadcast_id")
+    private UUID broadcastId;
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

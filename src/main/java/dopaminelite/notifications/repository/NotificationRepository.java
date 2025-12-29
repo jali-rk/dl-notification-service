@@ -100,4 +100,9 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
         NotificationChannel channel,
         Pageable pageable
     );
+
+    /**
+     * Find all notifications by broadcast ID.
+     */
+    java.util.List<Notification> findByBroadcastId(UUID broadcastId);
 }

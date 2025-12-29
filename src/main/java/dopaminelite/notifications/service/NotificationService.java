@@ -252,7 +252,7 @@ public class NotificationService {
                             (userData.getEmail() == null || userData.getEmail().isBlank())) {
                             continue;
                         }
-                        createDirectNotification(userId, userData.getEmail(), channel, request, userData);
+                        createDirectNotification(userId, userData.getEmail(), channel, request, userData, broadcast.getId());
                         successCount++;
                     } catch (Exception e) {
                         log.error("Failed to create notification for user {} channel {}", userId, channel, e);
@@ -307,7 +307,7 @@ public class NotificationService {
                 for (NotificationChannel channel : request.getChannels()) {
                     try {
                         if (channel == NotificationChannel.EMAIL) {
-                            createDirectNotificationByEmail(email, request);
+                            createDirectNotificationByEmail(email, request, broadcast.getId());
                             successCount++;
                         }
                     } catch (Exception e) {
@@ -396,7 +396,7 @@ public class NotificationService {
                             (userData.getEmail() == null || userData.getEmail().isBlank())) {
                             continue;
                         }
-                        createTemplateNotification(userId, userData.getEmail(), channel, template.getTemplateName(), personalizedContent);
+                        createTemplateNotification(userId, userData.getEmail(), channel, template.getTemplateName(), personalizedContent, broadcast.getId());
                         successCount++;
                     } catch (Exception e) {
                         log.error("Failed to create template notification for user {} channel {}", 
@@ -526,7 +526,7 @@ public class NotificationService {
      * If body contains HTML tags, sends as HTML email.
      */
     private void createTemplateNotification(UUID userId, String userEmail, NotificationChannel channel, 
-                                           String title, String body) {
+                                           String title, String body, UUID broadcastId) {
         Notification notification = new Notification();
         notification.setUserId(userId);
         notification.setChannel(channel);
@@ -534,6 +534,7 @@ public class NotificationService {
         notification.setBody(body);
         notification.setDeliveryStatus(DeliveryStatus.PENDING);
         notification.setRead(false);
+        notification.setBroadcastId(broadcastId);
         
         notificationRepository.save(notification);
         if (channel != NotificationChannel.IN_APP) {
@@ -579,7 +580,7 @@ public class NotificationService {
      * Create a direct ad-hoc notification for a user and channel.
      */
     private void createDirectNotification(UUID userId, String userEmail, NotificationChannel channel, 
-                                         DirectNotificationSendRequest request, UserPublicDataDto userData) {
+                                         DirectNotificationSendRequest request, UserPublicDataDto userData, UUID broadcastId) {
         Notification notification = new Notification();
         notification.setUserId(userId);
         notification.setChannel(channel);
@@ -593,6 +594,7 @@ public class NotificationService {
         notification.setMetadata(request.getMetadata());
         notification.setDeliveryStatus(DeliveryStatus.PENDING);
         notification.setRead(false);
+        notification.setBroadcastId(broadcastId);
         
         notificationRepository.save(notification);
         if (channel != NotificationChannel.IN_APP) {
@@ -607,7 +609,7 @@ public class NotificationService {
      * and directly send via email service (no outbox, immediate delivery).
      * Automatically detects HTML content and sends as rich text when appropriate.
      */
-    private void createDirectNotificationByEmail(String email, DirectNotificationSendByEmailRequest request) {
+    private void createDirectNotificationByEmail(String email, DirectNotificationSendByEmailRequest request, UUID broadcastId) {
         // Skip saving to notifications table since user_id is required
         // Directly send email without outbox processing
         try {

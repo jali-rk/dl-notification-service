@@ -3,9 +3,11 @@ package dopaminelite.notifications.service;
 import dopaminelite.notifications.dto.BroadcastDto;
 import dopaminelite.notifications.dto.BroadcastListResponse;
 import dopaminelite.notifications.entity.BroadcastRecord;
+import dopaminelite.notifications.entity.Notification;
 import dopaminelite.notifications.entity.enums.NotificationChannel;
 import dopaminelite.notifications.exception.ResourceNotFoundException;
 import dopaminelite.notifications.repository.BroadcastRecordRepository;
+import dopaminelite.notifications.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -19,6 +21,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Service for managing broadcast records.
@@ -30,6 +33,7 @@ import java.util.UUID;
 public class BroadcastService {
     
     private final BroadcastRecordRepository broadcastRepository;
+    private final NotificationRepository notificationRepository;
     
     /**
      * List broadcasts with optional filters and pagination.
@@ -43,7 +47,7 @@ public class BroadcastService {
         Page<BroadcastRecord> page = broadcastRepository.findByFilters(sentBy, dateFrom, dateTo, search, pageable);
 
         return BroadcastListResponse.builder()
-            .items(page.getContent().stream().map(this::toDto).toList())
+            .items(page.getContent().stream().map(this::toDtoWithoutNotifications).toList())
             .total(page.getTotalElements())
             .build();
     }
@@ -55,7 +59,7 @@ public class BroadcastService {
     public BroadcastDto getBroadcast(UUID broadcastId) {
         BroadcastRecord broadcast = broadcastRepository.findById(broadcastId)
             .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found: " + broadcastId));
-        return toDto(broadcast);
+        return toDtoWithNotifications(broadcast);
     }
     
     /**
@@ -80,7 +84,7 @@ public class BroadcastService {
         broadcast = broadcastRepository.save(broadcast);
         log.info("Created broadcast record: {} for {} recipients", broadcast.getId(), recipientCount);
         
-        return toDto(broadcast);
+        return toDtoWithoutNotifications(broadcast);
     }
     
     /**
@@ -99,9 +103,9 @@ public class BroadcastService {
     }
     
     /**
-     * Map entity to DTO.
+     * Map entity to DTO without notification IDs (for list view).
      */
-    private BroadcastDto toDto(BroadcastRecord broadcast) {
+    private BroadcastDto toDtoWithoutNotifications(BroadcastRecord broadcast) {
         return BroadcastDto.builder()
             .id(broadcast.getId())
             .templateId(broadcast.getTemplateId())
@@ -114,6 +118,32 @@ public class BroadcastService {
             .sentBy(broadcast.getSentBy())
             .sentAt(broadcast.getSentAt())
             .metadata(broadcast.getMetadata())
+            .build();
+    }
+    
+    /**
+     * Map entity to DTO with notification IDs (for detail view).
+     */
+    private BroadcastDto toDtoWithNotifications(BroadcastRecord broadcast) {
+        // Fetch all notification IDs for this broadcast
+        List<UUID> notificationIds = notificationRepository.findByBroadcastId(broadcast.getId())
+            .stream()
+            .map(Notification::getId)
+            .collect(Collectors.toList());
+        
+        return BroadcastDto.builder()
+            .id(broadcast.getId())
+            .templateId(broadcast.getTemplateId())
+            .title(broadcast.getTitle())
+            .body(broadcast.getBody())
+            .channels(broadcast.getChannels())
+            .recipientCount(broadcast.getRecipientCount())
+            .successCount(broadcast.getSuccessCount())
+            .failureCount(broadcast.getFailureCount())
+            .sentBy(broadcast.getSentBy())
+            .sentAt(broadcast.getSentAt())
+            .metadata(broadcast.getMetadata())
+            .notificationIds(notificationIds)
             .build();
     }
 }
