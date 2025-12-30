@@ -223,7 +223,7 @@ public class NotificationService {
             request.getTitle(),
             request.getBody(),
             request.getChannels(),
-            request.getTargetUserIds().size() * request.getChannels().size(),
+            request.getTargetUserIds().size(),
             sentBy,
             request.getMetadata()
         );
@@ -294,7 +294,7 @@ public class NotificationService {
             request.getTitle(),
             request.getBody(),
             request.getChannels(),
-            request.getTargetEmails().size() * request.getChannels().size(),
+            request.getTargetEmails().size(),
             sentBy,
             request.getMetadata()
         );
@@ -364,7 +364,7 @@ public class NotificationService {
             template.getTemplateName(),
             contentTemplate,
             channels,
-            request.getTargetUserIds().size() * channels.size(),
+            request.getTargetUserIds().size(),
             sentBy,
             request.getPlaceholderData()
         );
