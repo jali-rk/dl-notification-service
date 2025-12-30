@@ -58,11 +58,13 @@ jobs:
       # 7. Build and push Docker image to ECR
       - name: Build & push Docker image
         env:
+          # IMPORTANT: Set ECR_REPOSITORY differently in GitHub Environments "dev" vs "prod".
+          # Example:
+          #  - dev  -> dl-notification-service-dev
+          #  - prod -> dl-notification-service-prod
           ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
           AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
           AWS_REGION: ${{ vars.AWS_REGION }}
-          BRANCH: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
 
@@ -70,20 +72,14 @@ jobs:
           AWS_ACCOUNT=$(echo "${AWS_ACCOUNT_ID}" | tr -d '\r\n' | xargs)
           AWS_REG=$(echo "${AWS_REGION}" | tr -d '\r\n' | xargs)
 
-          IMAGE_BASE="${AWS_ACCOUNT}.dkr.ecr.${AWS_REG}.amazonaws.com/${ECR_REPO}"
-          TAG_BRANCH="${BRANCH}-latest"
-          TAG_SHA="${BRANCH}-${SHA}"
+          IMAGE_URI="${AWS_ACCOUNT}.dkr.ecr.${AWS_REG}.amazonaws.com/${ECR_REPO}:latest"
 
-          echo "Building image: ${ECR_REPO}:${TAG_SHA}"
-          echo "Target base: ${IMAGE_BASE}"
+          echo "Building image: ${ECR_REPO}:latest"
+          echo "Target URI: ${IMAGE_URI}"
 
-          docker build -t "${ECR_REPO}:${TAG_SHA}" .
-
-          docker tag "${ECR_REPO}:${TAG_SHA}" "${IMAGE_BASE}:${TAG_SHA}"
-          docker tag "${ECR_REPO}:${TAG_SHA}" "${IMAGE_BASE}:${TAG_BRANCH}"
-
-          docker push "${IMAGE_BASE}:${TAG_SHA}"
-          docker push "${IMAGE_BASE}:${TAG_BRANCH}"
+          docker build -t "${ECR_REPO}:latest" .
+          docker tag "${ECR_REPO}:latest" "${IMAGE_URI}"
+          docker push "${IMAGE_URI}"
 
       # 8. Force ECS service redeploy so it pulls the new image
       - name: Force ECS service redeploy
