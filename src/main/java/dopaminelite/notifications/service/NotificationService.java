@@ -235,35 +235,40 @@ public class NotificationService {
         Map<UUID, UserPublicDataDto> userDataMap = bffClientService.getBatchUserPublicData(request.getTargetUserIds());
 
         for (UUID userId : request.getTargetUserIds()) {
-            UserPublicDataDto userData = userDataMap.get(userId);
-            if (userData == null) {
-                log.warn("User {} not found in batch response, skipping", userId);
-                failureCount += request.getChannels().size();
-                continue;
-            }
-
-            // Validate that email exists for email channel
-            if (request.getChannels().contains(NotificationChannel.EMAIL) && 
-                (userData.getEmail() == null || userData.getEmail().isBlank())) {
-                log.warn("User {} has no email address, skipping email notification", userId);
-                failureCount += (int) request.getChannels().stream()
-                    .filter(ch -> ch == NotificationChannel.EMAIL)
-                    .count();
-            }
-            
-            for (NotificationChannel channel : request.getChannels()) {
-                try {
-                    // Skip email channel if no email address
-                    if (channel == NotificationChannel.EMAIL && 
-                        (userData.getEmail() == null || userData.getEmail().isBlank())) {
-                        continue;
-                    }
-                    createDirectNotification(userId, userData.getEmail(), channel, request, userData, broadcast.getId());
-                    successCount++;
-                } catch (Exception e) {
-                    log.error("Failed to create notification for user {} channel {}", userId, channel, e);
-                    failureCount++;
+            try {
+                UserPublicDataDto userData = userDataMap.get(userId);
+                if (userData == null) {
+                    log.warn("User {} not found in batch response, skipping", userId);
+                    failureCount += request.getChannels().size();
+                    continue;
                 }
+
+                // Validate that email exists for email channel
+                if (request.getChannels().contains(NotificationChannel.EMAIL) && 
+                    (userData.getEmail() == null || userData.getEmail().isBlank())) {
+                    log.warn("User {} has no email address, skipping email notification", userId);
+                    failureCount += (int) request.getChannels().stream()
+                        .filter(ch -> ch == NotificationChannel.EMAIL)
+                        .count();
+                }
+                
+                for (NotificationChannel channel : request.getChannels()) {
+                    try {
+                        // Skip email channel if no email address
+                        if (channel == NotificationChannel.EMAIL && 
+                            (userData.getEmail() == null || userData.getEmail().isBlank())) {
+                            continue;
+                        }
+                        createDirectNotification(userId, userData.getEmail(), channel, request, userData, broadcast.getId());
+                        successCount++;
+                    } catch (Exception e) {
+                        log.error("Failed to create notification for user {} channel {}", userId, channel, e);
+                        failureCount++;
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to process notification for user {}", userId, e);
+                failureCount += request.getChannels().size();
             }
         }
         
@@ -378,39 +383,44 @@ public class NotificationService {
         Map<UUID, UserPublicDataDto> userDataMap = bffClientService.getBatchUserPublicData(request.getTargetUserIds());
 
         for (UUID userId : request.getTargetUserIds()) {
-            UserPublicDataDto userData = userDataMap.get(userId);
-            if (userData == null) {
-                log.warn("User {} not found in batch response, skipping", userId);
-                failureCount += channels.size();
-                continue;
-            }
-
-            // Validate that email exists for email channel
-            if (channels.contains(NotificationChannel.EMAIL) && 
-                (userData.getEmail() == null || userData.getEmail().isBlank())) {
-                log.warn("User {} has no email address, skipping email notification", userId);
-                failureCount += (int) channels.stream()
-                    .filter(ch -> ch == NotificationChannel.EMAIL)
-                    .count();
-            }
-            
-            // Replace placeholders in content
-            String personalizedContent = replacePlaceholders(contentTemplate, request.getPlaceholderData(), userData);
-            
-            for (NotificationChannel channel : channels) {
-                try {
-                    // Skip email channel if no email address
-                    if (channel == NotificationChannel.EMAIL && 
-                        (userData.getEmail() == null || userData.getEmail().isBlank())) {
-                        continue;
-                    }
-                    createTemplateNotification(userId, userData.getEmail(), channel, template.getTemplateName(), personalizedContent, broadcast.getId());
-                    successCount++;
-                } catch (Exception e) {
-                    log.error("Failed to create template notification for user {} channel {}", 
-                        userId, channel, e);
-                    failureCount++;
+            try {
+                UserPublicDataDto userData = userDataMap.get(userId);
+                if (userData == null) {
+                    log.warn("User {} not found in batch response, skipping", userId);
+                    failureCount += channels.size();
+                    continue;
                 }
+
+                // Validate that email exists for email channel
+                if (channels.contains(NotificationChannel.EMAIL) && 
+                    (userData.getEmail() == null || userData.getEmail().isBlank())) {
+                    log.warn("User {} has no email address, skipping email notification", userId);
+                    failureCount += (int) channels.stream()
+                        .filter(ch -> ch == NotificationChannel.EMAIL)
+                        .count();
+                }
+                
+                // Replace placeholders in content
+                String personalizedContent = replacePlaceholders(contentTemplate, request.getPlaceholderData(), userData);
+                
+                for (NotificationChannel channel : channels) {
+                    try {
+                        // Skip email channel if no email address
+                        if (channel == NotificationChannel.EMAIL && 
+                            (userData.getEmail() == null || userData.getEmail().isBlank())) {
+                            continue;
+                        }
+                        createTemplateNotification(userId, userData.getEmail(), channel, template.getTemplateName(), personalizedContent, broadcast.getId());
+                        successCount++;
+                    } catch (Exception e) {
+                        log.error("Failed to create template notification for user {} channel {}", 
+                            userId, channel, e);
+                        failureCount++;
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to process template notification for user {}", userId, e);
+                failureCount += channels.size();
             }
         }
         
