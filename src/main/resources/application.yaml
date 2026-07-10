@@ -26,8 +26,11 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         jdbc:
           time_zone: UTC
+          batch_size: 500
           lob:
             non_contextual_creation: true
+        order_inserts: true
+        order_updates: true
 
   # Database Configuration
   datasource:

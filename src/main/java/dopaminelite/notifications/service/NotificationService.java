@@ -22,6 +22,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -206,7 +208,38 @@ public class NotificationService {
             createNotificationForChannel(request, channel, userData);
         }
     }
-    
+
+    /**
+     * Batch-fetch user public data from BFF for a list of user IDs.
+     * Returns null if the BFF call fails, after updating broadcast stats with total failures.
+     * Callers should check for null and return early.
+     */
+    private Map<UUID, UserPublicDataDto> fetchBatchUserData(List<UUID> userIds, BroadcastRecord broadcast) {
+        try {
+            return bffClientService.getBatchUserPublicData(userIds);
+        } catch (Exception e) {
+            int totalFailures = userIds.size();
+            log.error("Batch BFF call failed — marking all {} user(s) as failed for broadcast {}",
+                    totalFailures, broadcast.getId(), e);
+            updateBroadcastStats(broadcast, 0, totalFailures);
+            return null;
+        }
+    }
+
+    /**
+     * Build outbox entries for all EMAIL notifications and batch save them.
+     * Only EMAIL notifications are queued to the outbox for async delivery.
+     */
+    private void saveOutboxEntries(List<Notification> saved, Map<UUID, String> emailByUserId) {
+        List<DeliveryOutbox> outboxEntries = saved.stream()
+                .filter(n -> n.getChannel() == NotificationChannel.EMAIL)
+                .map(n -> buildOutboxEntry(n, emailByUserId.get(n.getUserId())))
+                .toList();
+        if (!outboxEntries.isEmpty()) {
+            deliveryOutboxRepository.saveAll(outboxEntries);
+        }
+    }
+
     /**
      * Send direct notifications to multiple users.
      * Supports multi-channel sends similar to event processing.
@@ -231,43 +264,58 @@ public class NotificationService {
         int successCount = 0;
         int failureCount = 0;
 
+        Map<UUID, UserPublicDataDto> userDataMap = fetchBatchUserData(request.getTargetUserIds(), broadcast);
+        if (userDataMap == null) return broadcast.getId();
+
+        // PHASE 1 — build all notifications in memory, no DB calls
+        List<Notification> toSave = new ArrayList<>();
+        Map<UUID, String> emailByUserId = new HashMap<>();
+
         for (UUID userId : request.getTargetUserIds()) {
             try {
-                // Fetch user data from BFF
-                UserPublicDataDto userData = bffClientService.getUserPublicData(userId);
-                
-                // Validate that email exists for email channel
-                if (request.getChannels().contains(NotificationChannel.EMAIL) && 
-                    (userData.getEmail() == null || userData.getEmail().isBlank())) {
-                    log.warn("User {} has no email address, skipping email notification", userId);
-                    failureCount += (int) request.getChannels().stream()
-                        .filter(ch -> ch == NotificationChannel.EMAIL)
-                        .count();
+                UserPublicDataDto userData = userDataMap.get(userId);
+                if (userData == null) {
+                    log.warn("No user data returned from BFF for user {}, skipping", userId);
+                    failureCount++;
+                    continue;
                 }
-                
+
                 for (NotificationChannel channel : request.getChannels()) {
-                    try {
-                        // Skip email channel if no email address
-                        if (channel == NotificationChannel.EMAIL && 
+                    if (channel == NotificationChannel.EMAIL &&
                             (userData.getEmail() == null || userData.getEmail().isBlank())) {
-                            continue;
-                        }
-                        createDirectNotification(userId, userData.getEmail(), channel, request, userData, broadcast.getId());
-                        successCount++;
-                    } catch (Exception e) {
-                        log.error("Failed to create notification for user {} channel {}", userId, channel, e);
+                        log.warn("User {} has no email address, skipping email notification", userId);
                         failureCount++;
+                        continue;
                     }
+                    toSave.add(buildDirectNotification(userId, channel, request, userData, broadcast.getId()));
+                    emailByUserId.put(userId, userData.getEmail());
+                    successCount++;
                 }
             } catch (Exception e) {
-                log.error("Failed to fetch user data for user {}", userId, e);
-                failureCount += request.getChannels().size();
+                failureCount++;
+                log.error("Failed to build notification for user {} — (total failures so far: {})", userId, failureCount, e);
             }
         }
-        
-        // Update broadcast stats
+
+        // PHASE 2 — single batch INSERT for all notifications (all-or-nothing)
+        // PHASE 3 — single batch INSERT for all outbox entries
+        try {
+            List<Notification> saved = notificationRepository.saveAll(toSave);
+            if (request.getChannels().contains(NotificationChannel.EMAIL)) {
+                saveOutboxEntries(saved, emailByUserId);
+            }
+        } catch (Exception e) {
+            log.error("Batch save failed for broadcast {} — all {} notifications rolled back",
+                broadcast.getId(), toSave.size(), e);
+            updateBroadcastStats(broadcast, 0, request.getTargetUserIds().size());
+            return broadcast.getId();
+        }
+
+        log.info("Broadcast {} completed — total={}, success={}, failed={}",
+            broadcast.getId(), request.getTargetUserIds().size(), successCount, failureCount);
+
         updateBroadcastStats(broadcast, successCount, failureCount);
-        
+
         return broadcast.getId();
     }
     
@@ -281,14 +329,12 @@ public class NotificationService {
         log.info("Sending direct notifications to {} email addresses via {} channels",
             request.getTargetEmails().size(), request.getChannels());
 
-        // Validate channels - only EMAIL is truly supported for email-only sends
-        if (request.getChannels().contains(NotificationChannel.IN_APP) || 
+        if (request.getChannels().contains(NotificationChannel.IN_APP) ||
             request.getChannels().contains(NotificationChannel.WHATSAPP)) {
             throw new ValidationException("Only EMAIL channel is supported when sending by email addresses. " +
                 "For IN_APP or WHATSAPP channels, use the /send endpoint with user IDs.");
         }
 
-        // Create broadcast record
         BroadcastRecord broadcast = createBroadcastRecord(
             null, // no template
             request.getTitle(),
@@ -358,7 +404,6 @@ public class NotificationService {
             throw new ValidationException("Template has no content");
         }
 
-        // Create broadcast record
         BroadcastRecord broadcast = createBroadcastRecord(
             template.getId(),
             template.getTemplateName(),
@@ -372,51 +417,70 @@ public class NotificationService {
         int successCount = 0;
         int failureCount = 0;
 
+        Map<UUID, UserPublicDataDto> userDataMap = fetchBatchUserData(request.getTargetUserIds(), broadcast);
+        if (userDataMap == null) {
+            incrementTemplateSentTimes(template);
+            return broadcast.getId();
+        }
+
+        // PHASE 1 — build all notifications in memory, no DB calls
+        List<Notification> toSave = new ArrayList<>();
+        Map<UUID, String> emailByUserId = new HashMap<>();
+
         for (UUID userId : request.getTargetUserIds()) {
             try {
-                // Fetch user data from BFF
-                UserPublicDataDto userData = bffClientService.getUserPublicData(userId);
-                
-                // Validate that email exists for email channel
-                if (channels.contains(NotificationChannel.EMAIL) && 
-                    (userData.getEmail() == null || userData.getEmail().isBlank())) {
-                    log.warn("User {} has no email address, skipping email notification", userId);
-                    failureCount += (int) channels.stream()
-                        .filter(ch -> ch == NotificationChannel.EMAIL)
-                        .count();
+                UserPublicDataDto userData = userDataMap.get(userId);
+                if (userData == null) {
+                    log.warn("No user data returned from BFF for user {}, skipping", userId);
+                    failureCount++;
+                    continue;
                 }
-                
-                // Replace placeholders in content
+
                 String personalizedContent = replacePlaceholders(contentTemplate, request.getPlaceholderData(), userData);
-                
+
                 for (NotificationChannel channel : channels) {
-                    try {
-                        // Skip email channel if no email address
-                        if (channel == NotificationChannel.EMAIL && 
+                    if (channel == NotificationChannel.EMAIL &&
                             (userData.getEmail() == null || userData.getEmail().isBlank())) {
-                            continue;
-                        }
-                        createTemplateNotification(userId, userData.getEmail(), channel, template.getTemplateName(), personalizedContent, broadcast.getId());
-                        successCount++;
-                    } catch (Exception e) {
-                        log.error("Failed to create template notification for user {} channel {}", 
-                            userId, channel, e);
+                        log.warn("User {} has no email address, skipping email notification", userId);
                         failureCount++;
+                        continue;
                     }
+                    toSave.add(buildTemplateNotification(userId, channel, template.getTemplateName(), personalizedContent, broadcast.getId()));
+                    emailByUserId.put(userId, userData.getEmail());
+                    successCount++;
                 }
             } catch (Exception e) {
-                log.error("Failed to fetch user data for user {}", userId, e);
-                failureCount += channels.size();
+                failureCount++;
+                log.error("Failed to build template notification for user {} — (total failures so far: {})", userId, failureCount, e);
             }
         }
-        
-        // Update broadcast and template stats
+
+        // PHASE 2 — single batch INSERT for all notifications (all-or-nothing)
+        // PHASE 3 — single batch INSERT for all outbox entries
+        try {
+            List<Notification> saved = notificationRepository.saveAll(toSave);
+            if (channels.contains(NotificationChannel.EMAIL)) {
+                saveOutboxEntries(saved, emailByUserId);
+            }
+        } catch (Exception e) {
+            log.error("Batch save failed for broadcast {} — all {} notifications rolled back",
+                broadcast.getId(), toSave.size(), e);
+            updateBroadcastStats(broadcast, 0, request.getTargetUserIds().size());
+            incrementTemplateSentTimes(template);
+            return broadcast.getId();
+        }
+
+        log.info("Broadcast {} (template: {}) completed — total={}, success={}, failed={}",
+            broadcast.getId(), template.getTemplateName(), request.getTargetUserIds().size(), successCount, failureCount);
+
         updateBroadcastStats(broadcast, successCount, failureCount);
         incrementTemplateSentTimes(template);
-        
+
         return broadcast.getId();
     }
-    
+
+
+
     /**
      * Create a broadcast record.
      */
@@ -577,9 +641,61 @@ public class NotificationService {
     }
     
     /**
+     * Build a direct notification object without saving to DB.
+     * Used in bulk send flows — caller is responsible for batch saving.
+     */
+    private Notification buildDirectNotification(UUID userId, NotificationChannel channel,
+                                                 DirectNotificationSendRequest request, UserPublicDataDto userData, UUID broadcastId) {
+        Notification notification = new Notification();
+        notification.setUserId(userId);
+        notification.setChannel(channel);
+        notification.setTitle(replacePlaceholders(request.getTitle(), request.getMetadata(), userData));
+        notification.setBody(replacePlaceholders(request.getBody(), request.getMetadata(), userData));
+        notification.setMetadata(request.getMetadata());
+        notification.setDeliveryStatus(DeliveryStatus.PENDING);
+        notification.setRead(false);
+        notification.setBroadcastId(broadcastId);
+        return notification;
+    }
+
+    /**
+     * Build a template notification object without saving to DB.
+     * Used in bulk send flows — caller is responsible for batch saving.
+     */
+    private Notification buildTemplateNotification(UUID userId, NotificationChannel channel,
+                                                   String title, String body, UUID broadcastId) {
+        Notification notification = new Notification();
+        notification.setUserId(userId);
+        notification.setChannel(channel);
+        notification.setTitle(title);
+        notification.setBody(body);
+        notification.setDeliveryStatus(DeliveryStatus.PENDING);
+        notification.setRead(false);
+        notification.setBroadcastId(broadcastId);
+        return notification;
+    }
+
+
+    /**
+     * Build a DeliveryOutbox entry for a saved notification without saving to DB.
+     * Used in bulk send flows — caller is responsible for batch saving.
+     */
+    private DeliveryOutbox buildOutboxEntry(Notification notification, String recipientEmail) {
+        DeliveryOutbox outbox = new DeliveryOutbox();
+        outbox.setNotificationId(notification.getId());
+        outbox.setChannel(notification.getChannel());
+        outbox.setRecipientEmail(recipientEmail);
+        outbox.setStatus(DeliveryStatus.PENDING);
+        outbox.setRetryCount(0);
+        outbox.setMaxRetries(3);
+        outbox.setNextRetryAt(Instant.now());
+        return outbox;
+    }
+
+    /**
      * Create a direct ad-hoc notification for a user and channel.
      */
-    private void createDirectNotification(UUID userId, String userEmail, NotificationChannel channel, 
+    private void createDirectNotification(UUID userId, String userEmail, NotificationChannel channel,
                                          DirectNotificationSendRequest request, UserPublicDataDto userData, UUID broadcastId) {
         Notification notification = new Notification();
         notification.setUserId(userId);
