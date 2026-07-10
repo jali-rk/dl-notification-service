@@ -103,11 +103,10 @@ public class BffClientService {
                 .body(requestBody)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, (request, resp) -> {
-                    throw new RuntimeException("BFF batch request failed with 4xx");
+                    throw new RuntimeException("BFF batch request failed with status " + resp.getStatusCode());
                 })
                 .onStatus(HttpStatusCode::is5xxServerError, (request, resp) -> {
-                    throw new RuntimeException("BFF server error during batch user fetch");
-                })
+                    throw new RuntimeException("BFF server error during batch user fetch (status " + resp.getStatusCode() + ")");                })
                 .body(BffBatchResponse.class);
 
             if (response == null || response.getData() == null) {
