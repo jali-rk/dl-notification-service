@@ -218,16 +218,25 @@ public class NotificationService {
     private Map<UUID, UserPublicDataDto> fetchBatchUserData(List<UUID> userIds, BroadcastRecord broadcast) {
         try {
             if (userIds.size() == 1) {
-                UUID userId = userIds.get(0);
-                UserPublicDataDto data = bffClientService.getUserPublicData(userId);
-                return Map.of(userId, data);
+                UUID userId = userIds.getFirst();
+                return fetchSingleUserWithoutVerificationCheck(userId);
             }
             return bffClientService.getBatchUserPublicData(userIds);
         } catch (Exception e) {
             int totalFailures = userIds.size();
-            log.error("BFF call failed — marking all {} user(s) as failed for broadcast {}",
+            log.error("Batch call failed — marking all {} user(s) as failed for broadcast {}",
                     totalFailures, broadcast.getId(), e);
             updateBroadcastStats(broadcast, 0, totalFailures);
+            return null;
+        }
+    }
+
+    private Map<UUID, UserPublicDataDto> fetchSingleUserWithoutVerificationCheck(UUID userId) {
+        try {
+            UserPublicDataDto data = bffClientService.getUserPublicData(userId);
+            return Map.of(userId, data);
+        } catch (Exception e) {
+            log.error("BFF call failed for user {} — returning null", userId, e);
             return null;
         }
     }
