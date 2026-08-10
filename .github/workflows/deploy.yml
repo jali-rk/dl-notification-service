@@ -4,20 +4,20 @@ on:
   push:
     branches:
       - dev
-      - prod
+      - main
 
 # Prevent overlapping deploys per branch (e.g., multiple pushes in quick succession)
 concurrency:
-  group: dl-notification-service-${{ github.ref_name }}
+  group: dl-notification-service-${{ github.ref_name == 'main' && 'prod' || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    # Map branch -> GitHub Environment so you can scope vars/secrets separately for dev/prod.
+    # Map branch -> GitHub Environment: main -> prod, dev -> dev
     # Create Environments named exactly: "dev" and "prod" in GitHub repo settings.
-    environment: ${{ github.ref_name }}
+    environment: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
 
     permissions:
       contents: read
