@@ -5,6 +5,7 @@ on:
     branches:
       - dev
       - prod
+      - sbx
 
 # Prevent overlapping deploys per branch (e.g., multiple pushes in quick succession)
 concurrency:
