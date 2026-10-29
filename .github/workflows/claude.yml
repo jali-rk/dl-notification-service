@@ -32,13 +32,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          fetch-depth: 1
+          fetch-depth: 0  # full history so Claude can compare branches (e.g. sbx vs dev)
 
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}  # runs on your Claude Pro plan (token from `claude setup-token`)
+          # Read-only git/GitHub queries for reports, plus common install/build/test commands for code changes.
+          claude_args: |
+            --allowedTools "Bash(git fetch:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(git branch:*),Bash(git ls-remote:*),Bash(git status:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh run list:*),Bash(gh run view:*),Bash(gh issue view:*),Bash(gh api repos/*),Bash(npm ci:*),Bash(npm install:*),Bash(npm run:*),Bash(npm test:*),Bash(npx:*),Bash(pnpm:*),Bash(yarn:*),Bash(pip install:*),Bash(pytest:*),Bash(python -m pytest:*),Bash(go test:*),Bash(go build:*)"
+        env:
+          GH_TOKEN: ${{ github.token }}  # lets the gh commands above read this repo's PRs and runs
 
           # Optional: Customize the trigger phrase (default: @claude)
           # trigger_phrase: "/claude"
